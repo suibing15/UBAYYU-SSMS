@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+  <title>Calculator</title>
+
+  <meta http-equiv="Content-Security-Policy" content="script-src 'self'; style-src 'self' 'unsafe-inline';">
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      background: #f8f9fa;
+      margin: 0;
+      padding: env(safe-area-inset-top) env(safe-area-inset-right)
+              env(safe-area-inset-bottom) env(safe-area-inset-left);
+    }
+
+    .calculator {
+      background: white;
+      border-radius: 10px;
+      box-shadow: 0 0 15px rgba(0,0,0,0.2);
+      width: 100%;
+      max-width: 330px;
+      padding: 20px;
+      box-sizing: border-box;
+    }
+
+    #calc-display {
+      width: 100%;
+      height: 55px;
+      font-size: 1.5em;
+      text-align: right;
+      margin-bottom: 15px;
+      padding: 10px;
+      border: 2px solid #ccc;
+      border-radius: 8px;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+
+    .buttons {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+    }
+
+    button {
+      font-size: 1.2em;
+      padding: 15px;
+      border: none;
+      border-radius: 8px;
+      background: #007bff;
+      color: white;
+      cursor: pointer;
+      transition: 0.15s;
+      touch-action: manipulation;
+    }
+    button:active {
+      opacity: .8;
+      transform: scale(.97);
+    }
+
+    .clear { background: #dc3545; }
+    .equal { background: #28a745; }
+
+    @media (max-width: 420px) {
+      button {
+        padding: 13px;
+        font-size: 1.1em;
+      }
+      #calc-display {
+        font-size: 1.3em;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="calculator">
+    <input id="calc-display" type="text" readonly />
+
+    <div class="buttons">
+      <button data-val="7">7</button>
+      <button data-val="8">8</button>
+      <button data-val="9">9</button>
+      <button data-val="/">÷</button>
+
+      <button data-val="4">4</button>
+      <button data-val="5">5</button>
+      <button data-val="6">6</button>
+      <button data-val="*">×</button>
+
+      <button data-val="1">1</button>
+      <button data-val="2">2</button>
+      <button data-val="3">3</button>
+      <button data-val="-">−</button>
+
+    <button data-val="0">0</button>
+<button data-val=".">.</button>
+<button id="calc-back">⌫</button>
+<button data-val="+">+</button>
+
+<button id="calc-clear" class="clear">C</button>
+<button id="calc-equal" class="equal" style="grid-column: span 3;">=</button>
+
+         </div>
+  </div>
+
+  <script src="/public/assets/js/calculator.js"></script>
+</body>
+</html>

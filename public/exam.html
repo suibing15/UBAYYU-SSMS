@@ -1,0 +1,577 @@
+<!-- public/exam.html -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Exam Portal - Assalam Academy</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700;9..144,900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/public/assets/css/style.css" />
+
+<style>
+:root {
+  --navy: #0f4c81;
+  --navy-2: #136fb1;
+  --ink: #14213d;
+  --maroon: #8b1d3f;
+  --gold: #c99700;
+  --green: #2e8b6f;
+  --danger: #d9534f;
+  --paper: #f4f6fb;
+  --card: #ffffff;
+  --card-2: #f7fafd;
+  --text: #1f2937;
+  --muted: #64748b;
+  --line: rgba(15,76,129,.12);
+  --shadow: 0 24px 60px -20px rgba(15,76,129,.35);
+  --shadow-sm: 0 8px 24px -12px rgba(15,76,129,.30);
+  --grid: rgba(15,76,129,.05);
+}
+html.dark {
+  --navy: #4f9dd8;
+  --navy-2: #6db3e8;
+  --ink: #e8eefc;
+  --maroon: #e78aa5;
+  --gold: #e5c245;
+  --green: #4fc6a1;
+  --danger: #f07a76;
+  --paper: #060b18;
+  --card: #0d1526;
+  --card-2: #111c31;
+  --text: #dbe4f3;
+  --muted: #8494ad;
+  --line: rgba(120,170,220,.14);
+  --shadow: 0 24px 70px -20px rgba(0,0,0,.75);
+  --shadow-sm: 0 10px 30px -14px rgba(0,0,0,.7);
+  --grid: rgba(120,170,220,.05);
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: 'Inter', system-ui, sans-serif;
+  color: var(--text);
+  background: var(--paper);
+  background-image:
+    linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 44px 44px;
+  min-height: 100vh;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  animation: fadeInBody .6s ease;
+  transition: background-color .4s ease, color .4s ease;
+}
+@keyframes fadeInBody { from { opacity: 0; } to { opacity: 1; } }
+
+/* ===== HEADER ===== */
+.school-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: linear-gradient(135deg, var(--navy), var(--navy-2));
+  color: #fff;
+  padding: 16px 20px;
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  box-shadow: 0 6px 20px -6px rgba(0,0,0,.4);
+}
+.school-header .crest {
+  width: 48px; height: 48px;
+  flex: none;
+  border-radius: 12px;
+  background: rgba(255,255,255,.16);
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden;
+}
+.school-header .crest img { width: 76%; height: 76%; object-fit: contain; }
+.school-header .titles { min-width: 0; }
+.school-header h1 {
+  margin: 0;
+  font-family: 'Fraunces', serif;
+  font-size: 1.15rem;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: .2px;
+}
+.school-header p {
+  margin: 2px 0 0;
+  font-size: .82rem;
+  color: rgba(255,255,255,.82);
+  font-weight: 500;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+.theme-toggle {
+  margin-left: auto;
+  flex: none;
+  width: 42px; height: 42px;
+  border-radius: 11px;
+  border: 1px solid rgba(255,255,255,.28);
+  background: rgba(255,255,255,.12);
+  color: #fff;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: background .2s, transform .2s;
+}
+.theme-toggle:hover { background: rgba(255,255,255,.22); transform: translateY(-2px); }
+.theme-toggle svg { width: 20px; height: 20px; }
+
+/* ===== CONTAINER ===== */
+.container {
+  max-width: 920px;
+  margin: 1.4rem auto;
+  padding: 0 18px;
+  animation: fadeInUp .55s ease;
+}
+@keyframes fadeInUp { from { opacity: 0; transform: translateY(22px); } to { opacity: 1; transform: translateY(0); } }
+
+.page-title {
+  text-align: center;
+  margin: 1.4rem 0 1.5rem;
+}
+.page-title .eyebrow {
+  display: inline-block;
+  font-size: .72rem;
+  font-weight: 700;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--maroon);
+  background: color-mix(in srgb, var(--maroon) 10%, transparent);
+  padding: 6px 14px;
+  border-radius: 999px;
+  margin-bottom: 12px;
+}
+.page-title h2 {
+  margin: 0;
+  font-family: 'Fraunces', serif;
+  font-weight: 700;
+  font-size: clamp(1.5rem, 4.5vw, 2.1rem);
+  color: var(--ink);
+}
+
+/* ===== CARD ===== */
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  margin-bottom: 18px;
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+  animation: fadeCard .45s ease;
+}
+@keyframes fadeCard { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+.card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--card-2);
+  padding: 15px 18px;
+  font-weight: 700;
+  font-family: 'Fraunces', serif;
+  border-bottom: 1px solid var(--line);
+  color: var(--navy);
+  font-size: 1.06rem;
+}
+.card-header::before {
+  content: "";
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--navy);
+  flex: none;
+}
+.card-body { padding: 18px; }
+
+/* ===== TITLES ===== */
+h3 {
+  color: var(--ink);
+  font-family: 'Fraunces', serif;
+  font-weight: 700;
+}
+
+/* ===== BUTTONS ===== */
+button.primary {
+  width: 100%;
+  padding: .82rem;
+  background: linear-gradient(135deg, var(--navy), var(--navy-2));
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  font-family: inherit;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  touch-action: manipulation;
+  letter-spacing: .3px;
+  box-shadow: 0 10px 22px -10px rgba(15,76,129,.6);
+  transition: transform .22s ease, box-shadow .22s ease, opacity .2s;
+}
+button.primary:hover { transform: translateY(-2px); box-shadow: 0 16px 28px -12px rgba(15,76,129,.7); }
+button.primary:active { transform: scale(.97); opacity: .92; }
+
+/* ===== INPUTS ===== */
+input {
+  width: 100%;
+  padding: .8rem .85rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  font-family: inherit;
+  font-size: 1rem;
+  margin-bottom: 1rem;
+  background: var(--card-2);
+  color: var(--text);
+  transition: border-color .22s, box-shadow .22s;
+}
+input::placeholder { color: var(--muted); }
+input:focus {
+  border-color: var(--navy);
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--navy) 20%, transparent);
+}
+
+/* ===== QUESTIONS ===== */
+#questionArea { margin-top: 1rem; }
+
+.question-block {
+  padding: 1.1rem;
+  background: var(--card-2);
+  border-radius: 14px;
+  margin-bottom: 1.2rem;
+  box-shadow: var(--shadow-sm);
+  border-left: 4px solid var(--navy);
+  transition: transform .25s, box-shadow .25s;
+}
+.question-block:hover { box-shadow: var(--shadow); transform: translateY(-2px); }
+
+.question-text {
+  font-weight: 600;
+  margin-bottom: .8rem;
+  font-size: 1.05rem;
+  color: var(--ink);
+  line-height: 1.5;
+}
+
+.question-img {
+  width: 100%;
+  max-width: 300px;
+  margin: .7rem 0;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-sm);
+}
+
+/* ===== OPTIONS ===== */
+label.option {
+  display: block;
+  background: var(--card);
+  padding: .78rem .85rem;
+  margin: .5rem 0;
+  border-radius: 11px;
+  border: 1px solid var(--line);
+  cursor: pointer;
+  touch-action: manipulation;
+  font-size: .98rem;
+  color: var(--text);
+  transition: background .2s, border-color .2s, transform .2s;
+}
+label.option:hover {
+  background: color-mix(in srgb, var(--navy) 8%, transparent);
+  border-color: var(--navy);
+  transform: translateX(3px);
+}
+label.option input { width: auto; margin: 0 8px 0 0; }
+
+/* ===== TIMER BAR ===== */
+#timerBar {
+  width: 100%;
+  height: 14px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--muted) 22%, transparent);
+  margin: 1.3rem 0;
+  overflow: hidden;
+  box-shadow: inset 0 2px 4px rgba(0,0,0,.14);
+}
+#timerFill {
+  height: 100%;
+  width: 100%;
+  background: linear-gradient(90deg, #00c853, #ffb300, #d50000);
+  transition: width 1s linear;
+  border-radius: 999px;
+}
+
+/* ===== RESULT ===== */
+#resultArea {
+  display: none;
+  text-align: center;
+  background: var(--card);
+  border: 1px solid var(--line);
+  padding: 2rem;
+  border-radius: 18px;
+  margin-top: 1.2rem;
+  box-shadow: var(--shadow);
+  animation: fadeIn .55s ease;
+}
+#resultArea h3 { margin-top: 0; }
+#resultArea p { color: var(--muted); }
+#score {
+  font-family: 'Fraunces', serif;
+  font-size: 2rem;
+  font-weight: 900;
+  color: var(--navy);
+  margin-bottom: .8rem;
+}
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+/* ===== FOOTER ===== */
+.site-footer {
+  margin: 2.4rem 0 1.6rem;
+  text-align: center;
+  font-size: .85rem;
+  color: var(--muted);
+  padding: 10px;
+}
+.site-footer strong { color: var(--text); font-weight: 600; }
+
+/* ===== MOBILE ===== */
+@media (max-width: 480px) {
+  .school-header h1 { font-size: 1rem; }
+  .container { padding: 0 14px; }
+  input, button.primary { font-size: .95rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, #timerFill, #broadcast-overlay { animation: none !important; transition: none !important; }
+}
+
+/* ===== CBT CALCULATOR ===== */
+#cbt-calculator {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  width: 260px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  z-index: 99999;
+  display: none;
+  user-select: none;
+  overflow: hidden;
+}
+#calc-header {
+  background: linear-gradient(135deg, var(--navy), var(--navy-2));
+  color: #fff;
+  padding: 10px 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: move;
+  font-weight: 600;
+  font-size: .92rem;
+}
+#calc-header button {
+  background: none;
+  border: none;
+  color: #fff;
+  font-size: 15px;
+  cursor: pointer;
+  margin-left: 6px;
+  width: auto;
+  opacity: .9;
+}
+#calc-header button:hover { opacity: 1; }
+#calc-display {
+  width: 100%;
+  height: 48px;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  margin: 0;
+  font-size: 18px;
+  padding: 6px 10px;
+  text-align: right;
+  background: var(--card-2);
+  color: var(--text);
+}
+#calc-buttons {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  padding: 10px;
+}
+#calc-buttons button {
+  padding: 12px 0;
+  border: none;
+  border-radius: 9px;
+  background: var(--navy);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  width: auto;
+  transition: transform .12s, filter .2s;
+}
+#calc-buttons button:hover { filter: brightness(1.08); }
+#calc-buttons button:active { transform: scale(.94); }
+#calc-equal { background: var(--green) !important; }
+#calc-clear { background: var(--danger) !important; }
+</style>
+</head>
+
+<body>
+
+<header class="school-header">
+  <span class="crest"><img src="/public/logo.png" alt="School Logo"></span>
+  <div class="titles">
+    <h1 id="schoolName">Assalam International Academic School Garko</h1>
+    <p>Exam Portal</p>
+  </div>
+  <button id="themeToggle" class="theme-toggle" aria-label="Toggle dark mode">
+    <svg id="iconSun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+    <svg id="iconMoon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="display:none"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+  </button>
+</header>
+
+<div class="container">
+
+  <div class="page-title">
+    <span class="eyebrow">Computer-Based Test</span>
+    <h2>Student CBT Exam Portal</h2>
+  </div>
+
+  <!-- LOGIN -->
+  <div class="card" id="auth">
+    <div class="card-header">Portal Login</div>
+    <div class="card-body">
+      <form id="authForm">
+        <input name="portalPassword" placeholder="Portal password" required>
+        <button class="primary" type="submit">Enter</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- CLASS SELECT -->
+  <div class="card" id="classSelect" style="display:none;">
+    <div class="card-header">Choose Class</div>
+    <div class="card-body">
+      <div id="classList"></div>
+    </div>
+  </div>
+
+  <!-- STUDENT SELECT -->
+  <div class="card" id="studentSelect" style="display:none;">
+    <div class="card-header">Select Student</div>
+    <div class="card-body">
+      <div id="studentsList"></div>
+    </div>
+  </div>
+
+  <!-- EXAM AREA -->
+  <div class="card" id="examArea" style="display:none;">
+    <div class="card-header">Exam Area</div>
+    <div class="card-body">
+      <h3 id="examTitle"></h3>
+      <div id="testsButtons"></div>
+
+      <div id="timerBar"><div id="timerFill"></div></div>
+
+      <div id="questionArea"></div>
+    </div>
+  </div>
+
+  <!-- RESULT -->
+  <div id="resultArea">
+    <h3>Exam Completed!</h3>
+    <p id="score"></p>
+    <p>Thank you for your participation.</p>
+  </div>
+
+</div>
+
+<!-- CBT FLOATING CALCULATOR -->
+<div id="cbt-calculator">
+
+<div id="calc-header">
+  <span>Calculator</span>
+  <div>
+    <button id="calc-min">—</button>
+    <button id="calc-close">✕</button>
+  </div>
+</div>
+
+<input id="calc-display" type="text">
+
+<div id="calc-buttons">
+
+<button data-val="7">7</button>
+<button data-val="8">8</button>
+<button data-val="9">9</button>
+<button data-val="/">÷</button>
+
+<button data-val="4">4</button>
+<button data-val="5">5</button>
+<button data-val="6">6</button>
+<button data-val="*">×</button>
+
+<button data-val="1">1</button>
+<button data-val="2">2</button>
+<button data-val="3">3</button>
+<button data-val="-">−</button>
+
+<button data-val="0">0</button>
+<button data-val=".">.</button>
+<button id="calc-back">⌫</button>
+<button data-val="+">+</button>
+
+<button data-val="%">%</button>
+<button data-val="Math.sqrt(">√</button>
+<button id="calc-clear">C</button>
+<button id="calc-equal">=</button>
+
+</div>
+
+</div>
+
+<script>
+/* ===== Theme toggle ===== */
+(function () {
+  const root = document.documentElement;
+  let dark = false;
+  try { dark = localStorage.getItem('theme') === 'dark'; } catch (e) {}
+  if (!localStorage.getItem('theme')) {
+    dark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  }
+  function apply() {
+    root.classList.toggle('dark', dark);
+    const sun = document.getElementById('iconSun');
+    const moon = document.getElementById('iconMoon');
+    if (sun && moon) { sun.style.display = dark ? 'none' : 'block'; moon.style.display = dark ? 'block' : 'none'; }
+  }
+  apply();
+  const btn = document.getElementById('themeToggle');
+  if (btn) btn.addEventListener('click', function () {
+    dark = !dark;
+    try { localStorage.setItem('theme', dark ? 'dark' : 'light'); } catch (e) {}
+    apply();
+  });
+})();
+</script>
+
+<script src="/branding.js"></script>
+<script src="/broadcast.js"></script>
+
+<script src="/public/assets/js/login.js"></script>
+<script src="/public/assets/js/exam.js"></script>
+<script src="/public/assets/js/exam-init.js"></script>
+<script src="/assets/js/cbt-calculator.js"></script>
+
+<footer class="site-footer">
+  © 2026 <strong>SUIBING IT SERVICES</strong>. All Rights Reserved.
+</footer>
+
+</body>
+</html>

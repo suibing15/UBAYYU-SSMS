@@ -1,0 +1,31 @@
+# ===== Secrets — never commit these =====
+.env
+.env.*
+!.env.example
+
+# ===== Dependencies =====
+node_modules/
+
+# ===== Generated / uploaded content (school-specific, not code) =====
+# These fill up with real student photos, signatures, and generated
+# PDFs the moment the app is used — they don't belong in git, and for
+# a second school, you don't want Assalam's actual files bundled into
+# a fresh deployment either.
+public/uploads/
+public/images/
+public/idcards/
+public/question-pdfs/
+uploads/
+files/
+reports/
+data/
+
+# ===== Logs =====
+*.log
+npm-debug.log*
+
+# ===== OS / editor noise =====
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

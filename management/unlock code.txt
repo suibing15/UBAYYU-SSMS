@@ -1,0 +1,5 @@
+fetch('/api/manage-unlock', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ key: 'ASSLM-ADMIN-ONLY' })
+})

@@ -1,0 +1,64 @@
+<!doctype html>
+<html>
+<head>
+  <title>System Locked</title>
+  <style>
+    body {
+      background: #0a2540;
+      color: #fff;
+      font-family: Arial;
+      display: flex;
+      height: 100vh;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+    }
+    .box {
+      background: #102a44;
+      padding: 40px;
+      border-radius: 12px;
+      max-width: 500px;
+    }
+    h1 { color: #ffcc00; }
+  </style>
+</head>
+<body>
+  <div class="box">
+    <h1>🔒 System Locked</h1>
+    <p>Your school software is temporarily locked.</p>
+    <p>Please contact the administrator, or enter the unlock password below if you have one.</p>
+
+    <input id="unlockPasswordInput" type="password" placeholder="Unlock password"
+           style="padding:8px;border-radius:6px;border:none;margin-top:10px;width:80%;">
+    <br>
+    <button id="unlockSubmitBtn" style="margin-top:10px;padding:8px 20px;border-radius:6px;border:none;background:#ffcc00;font-weight:bold;cursor:pointer;">
+      Unlock
+    </button>
+    <p id="unlockStatus" style="margin-top:10px;color:#ff6666;"></p>
+  </div>
+
+  <script>
+    document.getElementById("unlockSubmitBtn").onclick = async () => {
+      const status = document.getElementById("unlockStatus");
+      const unlockPassword = document.getElementById("unlockPasswordInput").value;
+      try {
+        const res = await fetch("/api/system/unlock", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ unlockPassword })
+        });
+        const j = await res.json();
+        if (j.success) {
+          status.style.color = "#7CFC00";
+          status.textContent = "✅ Unlocked. Reloading...";
+          setTimeout(() => location.href = "/", 1000);
+        } else {
+          status.textContent = "❌ " + (j.error || "Failed to unlock.");
+        }
+      } catch {
+        status.textContent = "❌ Network error.";
+      }
+    };
+  </script>
+</body>
+</html>

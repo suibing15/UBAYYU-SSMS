@@ -1,0 +1,30 @@
+{
+  "name": "asslm-cbt-server",
+  "version": "1.0.0",
+  "description": "CBT & Report Management Server for Assalam International Academy Garko",
+  "main": "server.js",
+  "bin": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js",
+    "build:exe": "nexe server.js -o asslm-cbt-server.exe --resources public/**,data/**,utils/**,.env"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.0",
+    "bcryptjs": "^2.4.3",
+    "body-parser": "^1.20.2",
+    "cors": "^2.8.5",
+    "dayjs": "^1.11.10",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-session": "^1.17.3",
+    "helmet": "^7.0.0",
+    "multer": "^1.4.5-lts.1",
+    "pdfkit": "^0.13.0",
+    "pg": "^8.11.5",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0"
+  }
+}

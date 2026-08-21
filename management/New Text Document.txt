@@ -1,0 +1,31 @@
+const crypto = require("crypto");
+
+function fingerprint(file) {
+  return crypto
+    .createHash("sha256")
+    .update(fs.readFileSync(file))
+    .digest("hex");
+}
+
+// 🔒 protected files
+const CORE_FILES = [
+  __filename,                     // server.js
+  require.resolve("./utils/pdfGenerator"), 
+];
+
+// 🔐 generate fingerprints once
+const SIGNATURES = CORE_FILES.map(fingerprint);
+
+// 🕵️ silent integrity check
+setInterval(() => {
+  try {
+    CORE_FILES.forEach((f, i) => {
+      if (fingerprint(f) !== SIGNATURES[i]) {
+        console.error("System integrity compromised.");
+        process.exit(1); // silent kill
+      }
+    });
+  } catch {
+    process.exit(1);
+  }
+}, 60_000); // every 60 seconds

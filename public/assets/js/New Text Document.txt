@@ -1,0 +1,22 @@
+document.addEventListener("DOMContentLoaded", () => {
+  const disp = document.getElementById("display");
+  const buttons = ["7","8","9","/","4","5","6","*","1","2","3","-","0",".","=","+","C","DEL"];
+  const container = document.getElementById("buttons");
+
+  buttons.forEach(b => {
+    const btn = document.createElement("button");
+    btn.textContent = b;
+    btn.addEventListener("click", () => {
+      if (b === "=") {
+        try { disp.value = eval(disp.value); } catch { disp.value = "Err"; }
+      } else if (b === "C") {
+        disp.value = "";
+      } else if (b === "DEL") {
+        disp.value = disp.value.slice(0, -1);
+      } else {
+        disp.value += b;
+      }
+    });
+    container.appendChild(btn);
+  });
+});

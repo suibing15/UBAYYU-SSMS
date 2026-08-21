@@ -1,0 +1,872 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Admin - Assalam Academy</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700;9..144,900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/public/assets/css/style.css" />
+
+<style>
+:root {
+  --navy: #0f4c81;
+  --navy-2: #136fb1;
+  --ink: #14213d;
+  --maroon: #8b1d3f;
+  --green: #2e8b6f;
+  --danger: #c0392b;
+  --paper: #f4f6fb;
+  --card: #ffffff;
+  --card-2: #f7fafd;
+  --text: #1f2937;
+  --muted: #64748b;
+  --line: rgba(15,76,129,.12);
+  --shadow: 0 24px 60px -20px rgba(15,76,129,.35);
+  --shadow-sm: 0 8px 24px -12px rgba(15,76,129,.30);
+  --grid: rgba(15,76,129,.05);
+  --term-bg: #f9fbff;
+  --console-bg: #0b1220;
+  --console-ink: #4ade80;
+}
+html.dark {
+  --navy: #4f9dd8;
+  --navy-2: #6db3e8;
+  --ink: #e8eefc;
+  --maroon: #e78aa5;
+  --green: #4fc6a1;
+  --danger: #f0736f;
+  --paper: #060b18;
+  --card: #0d1526;
+  --card-2: #111c31;
+  --text: #dbe4f3;
+  --muted: #8494ad;
+  --line: rgba(120,170,220,.14);
+  --shadow: 0 24px 70px -20px rgba(0,0,0,.75);
+  --shadow-sm: 0 10px 30px -14px rgba(0,0,0,.7);
+  --grid: rgba(120,170,220,.05);
+  --term-bg: #0a1424;
+  --console-bg: #05070d;
+  --console-ink: #4ade80;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: 'Inter', system-ui, sans-serif;
+  color: var(--text);
+  background: var(--paper);
+  background-image:
+    linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 44px 44px;
+  min-height: 100vh;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  transition: background-color .4s ease, color .4s ease;
+}
+
+/* HEADER */
+.school-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: linear-gradient(135deg, var(--navy), var(--navy-2));
+  color: #fff;
+  padding: 16px 20px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: 0 6px 20px -6px rgba(0,0,0,.4);
+}
+.school-header .crest {
+  width: 48px; height: 48px;
+  flex: none;
+  border-radius: 12px;
+  background: rgba(255,255,255,.16);
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden;
+}
+.school-header .crest img { width: 76%; height: 76%; object-fit: contain; }
+.school-header h1 {
+  font-family: 'Fraunces', serif;
+  font-size: 1.2rem;
+  margin: 0;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: .3px;
+}
+.theme-toggle {
+  margin-left: auto;
+  flex: none;
+  width: 42px; height: 42px;
+  border-radius: 11px;
+  border: 1px solid rgba(255,255,255,.28);
+  background: rgba(255,255,255,.12);
+  color: #fff;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: background .2s, transform .2s;
+}
+.theme-toggle:hover { background: rgba(255,255,255,.22); transform: translateY(-2px); }
+.theme-toggle svg { width: 20px; height: 20px; }
+
+/* PAGE TITLE */
+.page-title {
+  text-align: center;
+  margin: 1.6rem 0;
+}
+.page-title .eyebrow {
+  display: inline-block;
+  font-size: .72rem;
+  font-weight: 700;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--maroon);
+  background: color-mix(in srgb, var(--maroon) 10%, transparent);
+  padding: 6px 14px;
+  border-radius: 999px;
+  margin-bottom: 12px;
+}
+.page-title h2 {
+  margin: 0;
+  font-family: 'Fraunces', serif;
+  font-weight: 700;
+  font-size: clamp(1.6rem, 5vw, 2.3rem);
+  color: var(--ink);
+}
+
+/* CONTAINER */
+.container {
+  max-width: 950px;
+  margin: 1rem auto;
+  padding: 1rem 18px 2rem;
+}
+
+/* CARD */
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  margin-bottom: 16px;
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+  transition: transform .25s, box-shadow .25s;
+}
+.card:hover { box-shadow: var(--shadow); }
+.card-header {
+  background: var(--card-2);
+  padding: 15px 18px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: 'Fraunces', serif;
+  font-weight: 700;
+  font-size: 1.05rem;
+  cursor: pointer;
+  color: var(--navy);
+  border-bottom: 1px solid var(--line);
+}
+.toggle-icon {
+  font-size: 1.3rem;
+  color: var(--navy);
+  font-weight: 400;
+  transition: transform .25s;
+}
+.card-body {
+  max-height: 0;
+  overflow: hidden;
+  padding: 0 18px;
+  background: var(--card);
+  transition: max-height .3s ease, padding .3s ease;
+}
+.card-body.active {
+  padding: 16px 18px;
+}
+
+/* Standalone panels (not collapsible) */
+.panel {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  margin-bottom: 16px;
+  box-shadow: var(--shadow-sm);
+  padding: 20px;
+}
+.panel h2, .panel h3 {
+  margin-top: 0;
+  font-family: 'Fraunces', serif;
+  color: var(--ink);
+}
+
+/* BUTTONS */
+button.primary,
+.promote-btn,
+.analytics-btn,
+#generateReceiptBtn {
+  width: 100%;
+  background: linear-gradient(135deg, var(--navy), var(--navy-2));
+  color: #fff;
+  border: none;
+  padding: .8rem;
+  border-radius: 11px;
+  cursor: pointer;
+  font-family: inherit;
+  font-weight: 600;
+  font-size: 1rem;
+  box-shadow: 0 10px 22px -12px rgba(15,76,129,.6);
+  transition: transform .2s, box-shadow .2s, filter .2s;
+}
+button.primary:hover,
+.promote-btn:hover,
+.analytics-btn:hover,
+#generateReceiptBtn:hover { transform: translateY(-2px); box-shadow: 0 16px 28px -14px rgba(15,76,129,.7); }
+button.primary:active,
+.promote-btn:active,
+.analytics-btn:active,
+#generateReceiptBtn:active { transform: scale(.98); }
+
+button.danger,
+#deleteAttendanceBtn,
+#resetDataBtn {
+  background: linear-gradient(135deg, var(--danger), #922b21);
+  color: #fff;
+  border: none;
+  padding: .7rem 1rem;
+  border-radius: 11px;
+  cursor: pointer;
+  font-family: inherit;
+  font-weight: 600;
+  transition: transform .2s, filter .2s;
+}
+button.danger:hover,
+#deleteAttendanceBtn:hover,
+#resetDataBtn:hover { transform: translateY(-2px); filter: brightness(1.05); }
+
+/* Generic small buttons (download etc.) */
+.container > button,
+.card-body > button:not(.primary):not(.danger) {
+  background: linear-gradient(135deg, var(--navy), var(--navy-2));
+  color: #fff;
+  border: none;
+  padding: .7rem 1rem;
+  border-radius: 11px;
+  cursor: pointer;
+  font-family: inherit;
+  font-weight: 600;
+  font-size: .95rem;
+  margin: 6px 6px 6px 0;
+  box-shadow: 0 8px 18px -12px rgba(15,76,129,.6);
+  transition: transform .2s, filter .2s;
+}
+.container > button:hover { transform: translateY(-2px); filter: brightness(1.05); }
+
+/* INPUTS */
+input, select, textarea {
+  width: 100%;
+  padding: .72rem .8rem;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  margin-bottom: .7rem;
+  font-family: inherit;
+  font-size: .95rem;
+  background: var(--card-2);
+  color: var(--text);
+  transition: border-color .2s, box-shadow .2s;
+}
+input::placeholder, textarea::placeholder { color: var(--muted); }
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  border-color: var(--navy);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--navy) 20%, transparent);
+}
+input[type="file"] { padding: 8px; background: var(--card); }
+label {
+  display: block;
+  margin-top: 6px;
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text);
+}
+
+hr { border: none; border-top: 1px solid var(--line); margin: 16px 0; }
+
+/* STUDENT / LIST ROW */
+.list-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  background: var(--card-2);
+  padding: .8rem 1rem;
+  border-radius: 11px;
+  margin: .5rem 0;
+  border: 1px solid var(--line);
+  transition: border-color .2s, transform .2s;
+}
+.list-item:hover { border-color: var(--navy); transform: translateX(2px); }
+
+/* IMAGE PREVIEW */
+.img-preview {
+  margin-top: 6px;
+  max-width: 160px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+/* HINTS */
+.promote-hint, .hint {
+  font-size: 13px;
+  color: var(--muted);
+  margin-top: 6px;
+  line-height: 1.5;
+}
+.promote-btn { margin-top: 12px; }
+
+/* ANALYTICS */
+.analytics-panel {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 18px;
+  margin: 16px 0;
+  box-shadow: var(--shadow-sm);
+}
+.analytics-controls {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.analytics-select { width: auto; min-width: 160px; margin-bottom: 0; }
+.analytics-btn { width: auto; padding: .7rem 1.1rem; }
+#analyticsCanvas {
+  width: 100%;
+  height: 300px;
+  border-top: 1px solid var(--line);
+  margin-top: 10px;
+}
+.analytics-summary { margin-top: 8px; font-size: 13px; color: var(--muted); }
+
+/* CONSOLE VIEWERS */
+#attendanceViewer, #dataViewer {
+  margin-top: 10px;
+  max-height: 400px;
+  overflow: auto;
+  background: var(--console-bg);
+  color: var(--console-ink);
+  padding: 12px;
+  border-radius: 10px;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 12px;
+  border: 1px solid var(--line);
+}
+#attendanceViewer { max-height: 300px; }
+#dataViewer { display: none; }
+
+/* Broadcast panel */
+#broadcast-status { margin-top: 10px; font-weight: 600; font-size: .9rem; }
+
+/* Software / Data manager accents */
+.warn-box {
+  background: color-mix(in srgb, var(--danger) 8%, var(--card));
+  border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent);
+  padding: 16px;
+  border-radius: 12px;
+}
+.section-title-danger { color: var(--danger); font-family: 'Fraunces', serif; }
+#systemStatus { color: var(--green); font-weight: 700; }
+.admin-box h3 { font-family: 'Fraunces', serif; color: var(--ink); }
+
+/* MOBILE */
+@media (max-width: 480px) {
+  .school-header h1 { font-size: 1.05rem; }
+  .page-title h2 { font-size: 1.5rem; }
+  button.primary, input, select { font-size: .9rem; }
+  .analytics-select { width: 100%; }
+  .analytics-btn { width: 100%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, #broadcast-overlay { animation: none !important; transition: none !important; }
+}
+
+.site-footer {
+  margin: 2.4rem 0 1.6rem;
+  text-align: center;
+  font-size: .85rem;
+  color: var(--muted);
+  padding: 10px;
+}
+.site-footer strong { color: var(--text); font-weight: 600; }
+</style>
+</head>
+
+<body>
+
+<header class="school-header">
+  <span class="crest"><img src="/public/images/logo.png" class="school-logo" alt="School Logo"></span>
+  <h1 id="schoolName">Assalam International Academic School Garko</h1>
+  <button id="themeToggle" class="theme-toggle" aria-label="Toggle dark mode">
+    <svg id="iconSun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+    <svg id="iconMoon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="display:none"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+  </button>
+</header>
+
+<div class="container">
+
+  <div class="page-title">
+    <span class="eyebrow">Administration</span>
+    <h2>Admin Panel</h2>
+  </div>
+
+  <!-- LOGIN -->
+  <div id="loginArea">
+    <div class="panel">
+      <form id="adminLogin">
+        <input name="username" placeholder="Admin username" required>
+        <input name="password" type="password" placeholder="Password" required>
+        <button class="primary" type="submit">Login</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- MAIN ADMIN AREA -->
+  <div id="adminArea" style="display:none;">
+
+    <!-- Broadcast Message Manager -->
+    <div class="panel">
+      <h2>Broadcast Message</h2>
+      <input id="broadcastText"
+             type="text"
+             placeholder="Type message to broadcast to all users...">
+      <input id="broadcastSeconds"
+             type="number"
+             min="5" max="300" value="30"
+             placeholder="Seconds to display"
+             style="max-width:160px;">
+      <button class="primary" onclick="sendBroadcast()">Send Broadcast</button>
+      <p id="broadcast-status"></p>
+    </div>
+
+    <script>
+    async function sendBroadcast() {
+      const text = document.getElementById("broadcastText").value.trim();
+      const seconds = Number(document.getElementById("broadcastSeconds").value) || 30;
+      const status = document.getElementById("broadcast-status");
+
+      if (!text) {
+        status.style.color = 'var(--danger)';
+        status.textContent = "Message cannot be empty.";
+        return;
+      }
+
+      const res = await fetch("/api/admin/broadcast", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, durationSeconds: seconds })
+      });
+
+      const data = await res.json();
+
+      if (data.success) {
+        status.style.color = 'var(--green)';
+        status.textContent = `Broadcast Sent Successfully! (shown for ${seconds}s)`;
+      } else {
+        status.style.color = 'var(--danger)';
+        status.textContent = "Failed to send broadcast.";
+      }
+
+      setTimeout(() => status.textContent = "", 3000);
+    }
+    </script>
+
+    <!-- School Info (fully editable — CRUD) -->
+    <div class="panel">
+      <h3>🏫 School Information</h3>
+      <label>School Name</label>
+      <input id="school_name" type="text" placeholder="School name">
+      <label>Address</label>
+      <input id="school_address" type="text" placeholder="School address">
+      <label>Phone</label>
+      <input id="school_phone" type="text" placeholder="Phone number(s)">
+      <label>Motto</label>
+      <input id="school_motto" type="text" placeholder="School motto">
+      <button class="primary" id="saveSchoolInfo" style="margin-top:10px;">Save School Information</button>
+      <p id="schoolInfoStatus" style="font-size:.85rem;margin-top:6px;"></p>
+      <p style="font-size:.8rem;color:var(--muted);">These details appear on every report sheet, exam PDF, and ID card.</p>
+    </div>
+
+    <!-- Report Sheet Settings (term, session, next term date, danger zone) -->
+    <div class="panel">
+      <h3>🗒 Report Sheet Settings</h3>
+      <label>Term</label>
+      <input id="report_term" type="text" placeholder="e.g. Third Term">
+      <label>Session</label>
+      <input id="report_session" type="text" placeholder="e.g. 2025/2026">
+      <label>Next Term Begins</label>
+      <input id="report_next_term" type="text" placeholder="e.g. 08/09/2026">
+      <button class="primary" id="saveReportSettings" style="margin-top:10px;">Save Report Sheet Settings</button>
+      <p id="reportSettingsStatus" style="font-size:.85rem;margin-top:6px;"></p>
+
+      <hr>
+      <button id="deleteAllReportsBtn" style="margin-top:6px;">🗑 Delete All Report Data</button>
+      <p style="font-size:.8rem;color:var(--muted);margin-top:6px;">
+        Clears every student's test/exam scores school-wide. Use this at the start of a new term. This does not delete students, classes, or subjects.
+      </p>
+    </div>
+
+    <!-- Toggles -->
+    <div class="card">
+      <div class="card-header">
+        <span>Portal Toggles</span> <span class="toggle-icon">+</span>
+      </div>
+      <div class="card-body"><div id="toggles"></div></div>
+    </div>
+
+    <!-- Upload -->
+    <div class="panel">
+      <h3>Upload Logo / Signatures</h3>
+
+      <div style="border:1px solid var(--line);border-radius:10px;padding:12px;margin-top:8px;">
+        <h4 style="color:var(--ink);margin-top:0;">🏫 School Logo / Crest</h4>
+        <p style="font-size:.8rem;color:var(--muted);margin-top:2px;">The school's badge/crest image. Appears at the top of every PDF and on the website.</p>
+        <form class="brandUploadForm" enctype="multipart/form-data" data-type="logo">
+          <input type="file" name="image" accept="image/*" required>
+          <button class="primary" type="submit">Upload School Logo</button>
+        </form>
+      </div>
+
+      <div style="border:1px solid var(--line);border-radius:10px;padding:12px;margin-top:12px;">
+        <h4 style="color:var(--ink);margin-top:0;">✍️ Principal's Signature</h4>
+        <p style="font-size:.8rem;color:var(--muted);margin-top:2px;">A separate image, not the logo. Appears in the signature box on every report sheet.</p>
+        <form class="brandUploadForm" enctype="multipart/form-data" data-type="principal">
+          <input type="file" name="image" accept="image/*" required>
+          <button class="primary" type="submit">Upload Principal's Signature</button>
+        </form>
+      </div>
+
+      <p id="brandUploadStatus" style="font-size:.85rem;margin-top:10px;"></p>
+    </div>
+
+    <!-- Subjects & Questions -->
+    <div class="card">
+      <div class="card-header">
+        <span>Subjects &amp; Questions</span> <span class="toggle-icon">+</span>
+      </div>
+      <div class="card-body">
+        <label>Select Class:</label>
+        <select id="classSelector"></select>
+        <hr>
+        <form id="addSubjectForm">
+          <input name="id" placeholder="Subject ID (e.g. ENG)" required>
+          <input name="name" placeholder="Subject Name" required>
+          <button class="primary" type="submit">Add Subject</button>
+        </form>
+        <div id="subjectsList"></div>
+      </div>
+    </div>
+
+    <!-- PDFs -->
+    <div class="card">
+      <div class="card-header">
+        <span>Files (PDFs)</span> <span class="toggle-icon">+</span>
+      </div>
+      <div class="card-body">
+        <div id="pdfList"></div>
+      </div>
+    </div>
+
+    <!-- Classes -->
+    <div class="card">
+      <div class="card-header">
+        <span>Manage Classes</span> <span class="toggle-icon">+</span>
+      </div>
+      <div class="card-body">
+        <form id="addClassForm">
+          <input name="id" placeholder="Class ID (e.g. P1)" required>
+          <input name="name" placeholder="Class Name" required>
+          <input name="password" placeholder="Password (optional)">
+          <button class="primary" type="submit">Add Class</button>
+        </form>
+        <div id="classList"></div>
+      </div>
+    </div>
+
+    <!-- Students -->
+    <div class="card">
+      <div class="card-header">
+        <span>Manage Students</span> <span class="toggle-icon">+</span>
+      </div>
+      <div class="card-body">
+        <form id="addStudentForm" enctype="multipart/form-data">
+          <input name="id" placeholder="Student ID" required>
+          <input name="name" placeholder="Student Name" required>
+          <input name="classId" placeholder="Class ID" required>
+          <input name="password" placeholder="Password (optional)">
+          <input type="file" name="photo" accept="image/*">
+          <button class="primary" type="submit">Add Student</button>
+        </form>
+
+        <hr><b>Bulk Upload Students (CSV, TSV, or Excel)</b><br>
+        <form id="bulkStudentForm" enctype="multipart/form-data">
+          <input type="file" name="csv" accept=".csv,.tsv,.txt,.xlsx,.xls" required>
+          <div style="font-size:12px;color:#555;margin-top:4px;">
+            Columns: Student ID, Full Name, Class, Password (optional), and optionally Image (a filename, e.g. "0136A.jpg").
+          </div>
+          <label style="display:block;margin-top:8px;">Photos for this batch (optional, pick as many as you need at once):</label>
+          <input type="file" name="photos" accept="image/*" multiple>
+          <div style="font-size:12px;color:#555;margin-top:4px;">
+            Each photo's filename must exactly match what you typed in the sheet's "Image" column for that student.
+          </div>
+          <button class="primary" type="submit" style="margin-top:8px;">Upload</button>
+          <div id="bulkStudentStatus" style="font-size:13px;margin-top:6px;"></div>
+        </form>
+
+        <div style="margin-top:14px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <input id="studentSearchInput" type="text" placeholder="Search by name or ID..." style="flex:1;min-width:200px;">
+          <button id="deleteAllStudentsBtn" class="danger">🗑 Delete All Students</button>
+        </div>
+
+        <div id="studentList"></div>
+
+        <hr>
+        <h4 style="color:var(--ink);">Bulk ID Card Generation</h4>
+
+        <label>Select Class for Bulk ID Cards</label>
+        <select id="bulkClassSelect"></select>
+
+        <button id="bulkIdGenerateBtn" type="button" class="primary" style="margin-top:8px;">
+          Generate ID Cards For Entire Class
+        </button>
+
+        <div id="bulkIdStatus" style="margin-top:10px;font-size:13px;padding:8px 10px;border-radius:8px;background:var(--card-2);border:1px solid var(--line);color:var(--text);"></div>
+
+        <hr>
+        <button class="primary" id="downloadStudentStatsBtn">📄 Download Student Statistics (PDF)</button>
+
+        <p class="hint">
+          🔔 This will automatically generate ID cards for all students in the selected class.
+        </p>
+      </div>
+    </div>
+
+    <!-- Promote -->
+    <div class="panel">
+      <button class="primary promote-btn" onclick="bulkPromoteStudents()">
+        ⬆ Promote Students to Next Class
+      </button>
+      <p class="promote-hint">
+        This will move all students in the selected class to the next level.
+      </p>
+    </div>
+
+    <!-- Bulk Receipt Generator -->
+    <div class="card">
+      <div class="card-header" style="cursor:default;">
+        <span>Bulk Receipt Generator</span>
+      </div>
+      <div class="card-body active" style="max-height:none;padding:16px 18px;">
+
+        <label>Select Class</label>
+        <select id="receiptClassSelect">
+          <option value="">-- Select Class --</option>
+        </select>
+        <div class="hint">Choose the class for which bulk receipts will be generated.</div>
+
+        <label>Select Student(s)</label>
+        <select id="receiptStudentSelect" multiple size="6"></select>
+        <div class="hint">Hold CTRL (Windows) or CMD (Mac) to select multiple students.</div>
+
+        <label>Select Term</label>
+        <select id="receiptTermSelect">
+          <option value="">-- Select Term --</option>
+          <option value="First Term">First Term</option>
+          <option value="Second Term">Second Term</option>
+          <option value="Third Term">Third Term</option>
+        </select>
+        <div class="hint">Select the academic term associated with this payment.</div>
+
+        <label>Amount Paid</label>
+        <input type="number" id="receiptAmount" placeholder="Enter Amount in ₦" />
+        <div class="hint">Enter the amount paid per student in Nigerian Naira (₦).</div>
+
+        <button id="generateReceiptBtn">Generate Receipt</button>
+        <div id="receiptStatus" style="margin-top:16px;font-size:13px;text-align:center;color:var(--navy);font-weight:600;"></div>
+      </div>
+    </div>
+
+    <!-- Teacher Management -->
+    <div class="card">
+      <div class="card-header">
+        <span>👨‍🏫 Manage Teachers</span> <span class="toggle-icon">+</span>
+      </div>
+      <div class="card-body">
+        <form id="addTeacherForm" enctype="multipart/form-data">
+          <input name="id" placeholder="Teacher ID (e.g. T001)" required>
+          <input name="name" placeholder="Teacher Name" required>
+          <input name="password" placeholder="Password" required>
+          <input type="file" name="photo" accept="image/*" placeholder="Teacher photo">
+          <button class="primary" type="submit">Add Teacher</button>
+        </form>
+        <hr>
+        <button id="deleteAllTeachersBtn" class="danger">🗑 Delete All Staff</button>
+        <div id="teacherList"></div>
+      </div>
+    </div>
+
+    <!-- Attendance Reports -->
+    <div class="card">
+      <div class="card-header">
+        <span>📊 Attendance Reports</span> <span class="toggle-icon">+</span>
+      </div>
+      <div class="card-body">
+        <label>Select Class</label>
+        <select id="attendanceClassSelect"></select>
+
+        <button class="primary" id="loadAttendanceBtn">Load Attendance</button>
+        <button class="danger" id="deleteAttendanceBtn" style="margin-top:8px;">🗑️ Delete Attendance</button>
+
+        <pre id="attendanceViewer"></pre>
+      </div>
+    </div>
+
+    <!-- Attendance downloads -->
+    <div class="panel">
+      <h3>Attendance Downloads</h3>
+      <button onclick="downloadClassAttendance('weekly')">📅 Weekly Class Attendance</button>
+      <button onclick="downloadClassAttendance('monthly')">📆 Monthly Class Attendance</button>
+      <button onclick="downloadTeacherAttendance('monthly')">👨‍🏫 Teacher Attendance Summary</button>
+    </div>
+
+    <!-- Analytics -->
+    <div class="analytics-panel">
+      <div class="analytics-controls">
+        <select id="analyticsClass" class="analytics-select">
+          <option value="">Select Class</option>
+        </select>
+        <select id="analyticsMode" class="analytics-select">
+          <option value="overview">Class Overview</option>
+        </select>
+        <small style="color:var(--muted);font-size:12px">ℹ Shows overall class performance (ranking &amp; pass/fail)</small>
+        <button id="loadAnalyticsBtn" class="analytics-btn">📊 Load Analytics</button>
+      </div>
+      <canvas id="analyticsCanvas"></canvas>
+      <div id="analyticsSummary" class="analytics-summary"></div>
+    </div>
+
+    <!-- Software Management -->
+    <div class="admin-section panel" id="softwareManagement">
+      <h3 class="section-title-danger">🛠 Software Management</h3>
+      <div class="warn-box">
+        <p style="font-weight:600;">
+          System Status: <span id="systemStatus">ACTIVE</span>
+        </p>
+
+        <a id="contactDeveloperBtn"
+           class="primary"
+           href="https://wa.me/2347080195042?text=Hello%2C%20I%20would%20like%20to%20request%20an%20update%20or%20new%20feature%20for%20the%20school%20software."
+           target="_blank" rel="noopener"
+           style="display:inline-block;text-decoration:none;text-align:center;">
+          💬 Contact Developer (WhatsApp)
+        </a>
+        <p style="font-size:.8rem;color:var(--muted);margin-top:4px;">Opens WhatsApp with a pre-filled message for update/feature requests.</p>
+
+        <a id="contactDeveloperEmailBtn"
+           class="primary"
+           href="mailto:suibing15@gmail.com?subject=Software%20Update%2FFeature%20Request&body=Hello%2C%20I%20would%20like%20to%20request%20an%20update%20or%20new%20feature%20for%20the%20school%20software."
+           style="display:inline-block;text-decoration:none;text-align:center;margin-top:8px;">
+          📧 Contact Developer (Email)
+        </a>
+      </div>
+    </div>
+
+    <!-- Data Manager -->
+    <section class="admin-box panel">
+      <h3>🗄 Data Manager</h3>
+      <button id="resetDataBtn">🔒 Freeze Data Display</button>
+      <p style="font-size:.85rem;color:var(--muted);margin-top:8px;">
+        Freezing hides the admin screens from view until you unfreeze. Your data itself is never deleted.
+      </p>
+
+      <hr style="margin:20px 0;border-color:#e8d9b0;">
+
+      <h4 style="color:#a8432f;">☠ Factory Reset</h4>
+      <p style="font-size:.85rem;color:var(--muted);margin-bottom:10px;">
+        Permanently erases every class, teacher, student, subject, question, result, and attendance
+        record in the entire school, back to a blank slate. Your own admin login is kept, so you
+        won't be locked out. This cannot be undone.
+      </p>
+      <label style="font-size:.85rem;display:block;margin-bottom:4px;">
+        Type <strong>RESET SCHOOL DATA</strong> to enable the button below
+      </label>
+      <input id="factoryResetConfirmText" type="text" placeholder="RESET SCHOOL DATA" style="max-width:260px;">
+      <button id="factoryResetBtn" disabled style="background:#a8432f;color:#fff;margin-top:8px;">
+        Factory reset everything
+      </button>
+      <div id="factoryResetStatus" style="font-size:.85rem;margin-top:8px;"></div>
+    </section>
+
+    <!-- Account Security -->
+    <section class="admin-box panel">
+      <h3>🔐 Account Security</h3>
+
+      <h4 style="color:var(--ink);">Change My Login Password</h4>
+      <input id="admin_current_password" type="password" placeholder="Current password">
+      <input id="admin_new_password" type="password" placeholder="New password">
+      <button class="primary" id="changeAdminPasswordBtn" style="margin-top:8px;">Change Password</button>
+      <p id="changeAdminPasswordStatus" style="font-size:.85rem;margin-top:6px;"></p>
+
+      <hr>
+      <h4 style="color:var(--ink);">Unlock Password</h4>
+      <p style="font-size:.8rem;color:var(--muted);">
+        Lets anyone with this password unlock the system from the lock screen, without needing your admin login. Useful as a backup if you can't access the admin panel yourself.
+      </p>
+      <input id="new_unlock_password" type="password" placeholder="New unlock password">
+      <button class="primary" id="setUnlockPasswordBtn" style="margin-top:8px;">Set / Change Unlock Password</button>
+      <p id="setUnlockPasswordStatus" style="font-size:.85rem;margin-top:6px;"></p>
+    </section>
+
+  </div>
+</div>
+
+<script>
+/* ===== Theme toggle ===== */
+(function () {
+  const root = document.documentElement;
+  let dark = false;
+  try { dark = localStorage.getItem('theme') === 'dark'; } catch (e) {}
+  if (!localStorage.getItem('theme')) {
+    dark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  }
+  function apply() {
+    root.classList.toggle('dark', dark);
+    const sun = document.getElementById('iconSun');
+    const moon = document.getElementById('iconMoon');
+    if (sun && moon) { sun.style.display = dark ? 'none' : 'block'; moon.style.display = dark ? 'block' : 'none'; }
+  }
+  apply();
+  const btn = document.getElementById('themeToggle');
+  if (btn) btn.addEventListener('click', function () {
+    dark = !dark;
+    try { localStorage.setItem('theme', dark ? 'dark' : 'light'); } catch (e) {}
+    apply();
+  });
+})();
+</script>
+
+<script src="/branding.js"></script>
+<script src="/broadcast.js"></script>
+
+<script src="/public/assets/js/login.js"></script>
+<script src="/manage/admin.js"></script>
+<script src="/manage/admin-ui.js"></script>
+
+<footer class="site-footer">
+© 2025 <strong>SUIBING IT SERVICES</strong>. All Rights Reserved.
+</footer>
+
+</body>
+</html>

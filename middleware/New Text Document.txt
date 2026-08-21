@@ -1,0 +1,26 @@
+const { isReportLocked } = require("../utils/reportLock");
+
+module.exports = function reportGuard(req, res, next) {
+  const state = isReportLocked();
+
+  if (state.locked) {
+    return res.status(403).json({
+      title: "REPORT GENERATION RESTRICTED",
+      message:
+        "This report feature has been temporarily disabled due to license limitations.",
+      details:
+        "Academic report generation is protected under the SUIBING IT SERVICES Software License Agreement (India).",
+      action:
+        "Please contact the school management or SUIBING IT SERVICES to restore access.",
+      contact: {
+        email: "suibingitservices@gmail.com",
+        whatsapp: "+234-816-578-9331"
+      },
+      legal_notice:
+        "Unauthorized use or circumvention of this restriction may violate software usage terms.",
+      reason: state.reason
+    });
+  }
+
+  next();
+};
