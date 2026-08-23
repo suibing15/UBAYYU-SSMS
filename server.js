@@ -780,7 +780,7 @@ app.get('/manage/admin-ui.js', requireAdmin, (req, res) => {
 app.post('/api/manage-unlock', (req, res) => {
   const { key } = req.body;
 
-  if (key === 'ASSLM') {
+  if (key === 'UBAYYU') {
     req.session.isAdmin = true;
     return res.json({ success: true });
   }
