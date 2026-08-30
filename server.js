@@ -3750,6 +3750,17 @@ app.get(
 // ============================================================================
 // GENERATE ONE SINGLE PDF FOR A WHOLE CLASS (ALL STUDENTS + SUMMARY PAGE)
 // ============================================================================
+//
+// The combined class report is a fully regenerable artifact — every value in
+// it is recomputed from Postgres on each request, and nothing ever fetches an
+// old copy back. So it is no longer written to Supabase Storage at all. This
+// route now just (a) fires the background per-student report-sheet sync (those
+// DO persist, because parents fetch them later) and (b) hands the frontend a
+// URL to a fresh-stream endpoint. The frontend contract is unchanged: it still
+// receives { success, file } and still does window.open(file).
+//
+// Shared calculation lives in buildCombinedReportContext() below so this route
+// and the stream route can never drift apart.
 app.get(
   "/api/teacher/class/:classId/combined-report",
   reportGuard,
@@ -3759,77 +3770,53 @@ app.get(
     const { classId } = req.params;
     const data = readData();
 
-    const students = (data.students || []).filter(s => s.classId === classId);
-    if (!students.length) {
-      return res.status(404).json({ error: "No students found." });
+    // Validate up front so the frontend still gets a clean 404/JSON error
+    // before we ever hand back a stream URL that would just fail later.
+    const ctx = buildCombinedReportContext(data, classId);
+    if (ctx.error) {
+      return res.status(ctx.status).json({ error: ctx.error });
     }
 
-    const classEntry = (data.classes || []).find(c => c.id === classId);
-    if (!classEntry) {
-      return res.status(404).json({ error: "Class not found." });
-    }
-
-    // ✅ ALWAYS resolve full subject list
-    const subjects = getClassSubjectsResolved(data, classEntry.id);
-    if (!subjects.length) {
-      return res.status(404).json({ error: "No subjects configured for this class yet." });
-    }
-    const subjectIds = subjects.map(s => s.id);
-    const subjectCount = subjects.length || 1; // prevent division by zero
-
-    // =========================
-    // CALCULATE TOTALS & RANK (MATCH REPORT SHEET LOGIC)
-    // =========================
-    students.forEach(s => {
-
-      let totalScore = 0;
-
-      subjects.forEach(sub => {
-        const r = (data.results || []).find(
-          x => x.studentId === s.id && x.subject === sub.id
-        ) || {};
-
-        totalScore +=
-          (r.test1 || 0) +
-          (r.test2 || 0) +
-          (r.test3 || 0) +
-          (r.exam  || 0);
-      });
-
-      s.totalScore = totalScore;
-      s.average = totalScore / subjectCount; // ✅ SAME AS REPORT SHEET
+    // Per-student parent-facing report sheets still persist — this calls the
+    // individual-reports route, exactly as before. Runs in the background; the
+    // admin doesn't wait on it before getting the combined-report URL back.
+    fetch(`http://localhost:${PORT}/api/teacher/class/${encodeURIComponent(classId)}/reports`).catch((syncErr) => {
+      console.error('Combined report → individual parent-portal sync error:', syncErr);
     });
 
-    students.sort((a, b) => b.average - a.average);
-
-    const suffix = n => {
-      if (n % 10 === 1 && n % 100 !== 11) return "st";
-      if (n % 10 === 2 && n % 100 !== 12) return "nd";
-      if (n % 10 === 3 && n % 100 !== 13) return "rd";
-      return "th";
-    };
-
-    students.forEach((s, i) => {
-      s.positionIndex = i + 1;
-      s.position = `${i + 1}${suffix(i + 1)}`;
+    // No upload, no pdfs row. The file is regenerated on demand by the stream
+    // route below whenever it's opened.
+    res.json({
+      success: true,
+      file: `/api/teacher/class/${encodeURIComponent(classId)}/combined-report/stream`
     });
 
-    // =========================
-    // META
-    // =========================
-    const meta = {
-      ...(data.meta || {}), // real school branding: address, motto, phone, logo, signaturePrincipal, nextTermBegins, etc.
-      schoolName: data.meta?.schoolName || "ASSALAM INTERNATIONAL ACADEMIC SCHOOL",
-      className: classId,
-      term: data.meta?.term || "Third Term",
-      session: data.meta?.session || "",
-      totalStudents: students.length
-    };
+  } catch (err) {
+    console.error("Combined report error:", err);
+    res.status(500).json({ error: "Server error." });
+  }
+});
 
-    // Generated to a temp file first (PDFKit needs a writable
-    // stream), then uploaded to Supabase Storage below. meta.logo is
-    // a Supabase Storage URL now — resolved to a local temp file
-    // first, generateClassReportPDF itself is completely unchanged.
+
+// Streams a freshly generated combined class report straight to the browser.
+// Nothing is written to Supabase Storage and no pdfs row is created — the temp
+// file is piped to the response and deleted afterward, whether the pipe
+// succeeds or fails.
+app.get(
+  "/api/teacher/class/:classId/combined-report/stream",
+  reportGuard,
+  async (req, res) => {
+
+  try {
+    const { classId } = req.params;
+    const data = readData();
+
+    const ctx = buildCombinedReportContext(data, classId);
+    if (ctx.error) {
+      return res.status(ctx.status).json({ error: ctx.error });
+    }
+    const { students, subjects, meta } = ctx;
+
     const localPath = tempPdfPath(`Class_${classId}_FULL_REPORT.pdf`);
     const logoResolved = await withResolvedImages(meta);
 
@@ -3839,50 +3826,107 @@ app.get(
       data.results || [],
       subjects,
       localPath,
-      async (err) => {
+      (err) => {
         logoResolved.cleanup();
 
         if (err) {
           console.error("PDF generation error:", err);
-          return res.status(500).json({ error: "PDF generation failed." });
+          if (!res.headersSent) res.status(500).json({ error: "PDF generation failed." });
+          fs.unlink(localPath, () => {});
+          return;
         }
 
-        let relPath;
-        try {
-          relPath = await uploadLocalFileAndCleanup(localPath, `reports/${classId}/Class_${classId}_FULL_REPORT.pdf`);
-        } catch (uploadErr) {
-          console.error("Combined report storage upload failed:", uploadErr);
-          return res.status(500).json({ error: "Failed to store the generated report." });
-        }
+        res.setHeader("Content-Type", "application/pdf");
+        res.setHeader(
+          "Content-Disposition",
+          `inline; filename="Class_${classId}_FULL_REPORT.pdf"`
+        );
 
-        // Was previously registering this SAME combined, whole-class
-        // document as every student's parent-facing "report sheet" —
-        // meaning a parent would see the entire class's document, not
-        // just their own child's page. Fixed: this internally calls
-        // the individual-reports route (the same one used by the
-        // "Individual report sheets" button), which generates each
-        // student their own proper single-student PDF and registers
-        // THAT as their report sheet — completely independent of
-        // whatever this combined document looks like. Runs in the
-        // background; the admin doesn't need to wait on this before
-        // seeing the success response for the combined PDF itself.
-        fetch(`http://localhost:${PORT}/api/teacher/class/${encodeURIComponent(classId)}/reports`).catch((syncErr) => {
-          console.error('Combined report → individual parent-portal sync error:', syncErr);
+        const stream = fs.createReadStream(localPath);
+        stream.on("error", (streamErr) => {
+          console.error("Combined report stream error:", streamErr);
+          if (!res.headersSent) res.status(500).json({ error: "Failed to stream report." });
+          fs.unlink(localPath, () => {});
         });
-
-        res.json({
-          success: true,
-          file: relPath
-        });
+        // Delete the temp file once the response is fully sent (or the client
+        // disconnects) — best-effort, never blocks.
+        res.on("close", () => fs.unlink(localPath, () => {}));
+        stream.pipe(res);
       }
     );
 
   } catch (err) {
-    console.error("Combined report error:", err);
-    res.status(500).json({ error: "Server error." });
+    console.error("Combined report stream error:", err);
+    if (!res.headersSent) res.status(500).json({ error: "Server error." });
   }
 });
 
+
+// Shared calculation for both combined-report routes above. Returns either
+// { error, status } on a validation failure, or { students, subjects, meta }
+// ready for generateClassReportPDF. Kept as one function so the JSON route and
+// the stream route always compute identical totals, ranks, and positions.
+function buildCombinedReportContext(data, classId) {
+  const students = (data.students || []).filter(s => s.classId === classId);
+  if (!students.length) {
+    return { error: "No students found.", status: 404 };
+  }
+
+  const classEntry = (data.classes || []).find(c => c.id === classId);
+  if (!classEntry) {
+    return { error: "Class not found.", status: 404 };
+  }
+
+  const subjects = getClassSubjectsResolved(data, classEntry.id);
+  if (!subjects.length) {
+    return { error: "No subjects configured for this class yet.", status: 404 };
+  }
+  const subjectCount = subjects.length || 1; // prevent division by zero
+
+  // =========================
+  // CALCULATE TOTALS & RANK (MATCH REPORT SHEET LOGIC)
+  // =========================
+  students.forEach(s => {
+    let totalScore = 0;
+    subjects.forEach(sub => {
+      const r = (data.results || []).find(
+        x => x.studentId === s.id && x.subject === sub.id
+      ) || {};
+      totalScore +=
+        (r.test1 || 0) +
+        (r.test2 || 0) +
+        (r.test3 || 0) +
+        (r.exam  || 0);
+    });
+    s.totalScore = totalScore;
+    s.average = totalScore / subjectCount; // ✅ SAME AS REPORT SHEET
+  });
+
+  students.sort((a, b) => b.average - a.average);
+
+  const suffix = n => {
+    if (n % 10 === 1 && n % 100 !== 11) return "st";
+    if (n % 10 === 2 && n % 100 !== 12) return "nd";
+    if (n % 10 === 3 && n % 100 !== 13) return "rd";
+    return "th";
+  };
+
+  students.forEach((s, i) => {
+    s.positionIndex = i + 1;
+    s.position = `${i + 1}${suffix(i + 1)}`;
+  });
+
+  const meta = {
+    ...(data.meta || {}),
+    schoolName: data.meta?.schoolName || "ASSALAM INTERNATIONAL ACADEMIC SCHOOL",
+    className: classId,
+    term: data.meta?.term || "Third Term",
+    session: data.meta?.session || "",
+    totalStudents: students.length
+  };
+
+  return { students, subjects, meta };
+}
 
 // ---------------- SIGNATURE UPLOAD ROUTES ----------------
 
