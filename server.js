@@ -4147,7 +4147,21 @@ async function regenerateConsolidatedPDF(studentId, category) {
       if (r.exam === undefined) continue;
       const examQuestions = (subj?.questions?.exam) || [];
       const maxPossible = examQuestions.reduce((sum, q) => sum + (Number(q.marks) || 1), 0);
-      const percentage = maxPossible > 0 ? Number(((r.exam / maxPossible) * 100).toFixed(1)) : null;
+      // maxPossible comes from the CURRENT exam question bank, but a
+      // student's stored r.exam score may have been earned against an
+      // older version of that bank (more questions, or higher marks)
+      // that's since been edited down by the teacher. When that
+      // happens the same, perfectly correct stored score computes
+      // against a now-smaller total — e.g. a 70/100 score against a
+      // bank that's since shrunk to 5 marks total prints as 1400%.
+      // There's no reliable historical "total marks at submission
+      // time" recorded anywhere to compute this correctly for every
+      // case, so this clamp is a hard backstop: a percentage can never
+      // be genuinely below 0 or above 100, so neither is ever shown to
+      // a parent, regardless of how the underlying question bank has
+      // changed since.
+      const rawPercentage = maxPossible > 0 ? (r.exam / maxPossible) * 100 : null;
+      const percentage = rawPercentage === null ? null : Number(Math.min(100, Math.max(0, rawPercentage)).toFixed(1));
       subjectRows.push({ subjectName, examScore: r.exam, percentage });
       if (percentage !== null) {
         totalSum += percentage;

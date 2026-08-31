@@ -83,6 +83,18 @@ async function loadFromDatabase() {
     parentPortal: true,
     attendancePortal: true
   };
+  // Same problem as portalToggles above, plus a second bug on top of it:
+  // server.js's own "if empty, use defaults" checks for testToggles are
+  // written as `if (!data.meta.testToggles)`, but an empty object `{}`
+  // is truthy in JavaScript — `!{}` is `false` — so that check silently
+  // never fires for a school whose test_toggles column is NULL (which
+  // becomes `{}` via the `|| {}` below). The admin panel then receives
+  // zero keys to render, and the Test/Exam Toggles section shows
+  // nothing. Merging defaults here, the same way portalToggles is
+  // handled above, means every route that reads data.meta.testToggles
+  // always sees a fully-populated object regardless of that unrelated
+  // truthiness bug elsewhere.
+  const DEFAULT_TEST_TOGGLES = { test1: true, test2: true, test3: true, exam: true };
   const meta = {
     schoolName: s.school_name,
     address: s.address,
@@ -95,7 +107,7 @@ async function loadFromDatabase() {
     signaturePrincipal: s.signature_principal_path,
     portalToggles: { ...DEFAULT_PORTAL_TOGGLES, ...(s.portal_toggles || {}) },
     portalPasswords: s.portal_passwords || {},
-    testToggles: s.test_toggles || {},
+    testToggles: { ...DEFAULT_TEST_TOGGLES, ...(s.test_toggles || {}) },
     unlockPasswordHash: s.unlock_password_hash
   };
 
