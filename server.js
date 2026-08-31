@@ -4145,22 +4145,27 @@ async function regenerateConsolidatedPDF(studentId, category) {
       countedSubjects++;
     } else {
       if (r.exam === undefined) continue;
-      const examQuestions = (subj?.questions?.exam) || [];
-      const maxPossible = examQuestions.reduce((sum, q) => sum + (Number(q.marks) || 1), 0);
-      // maxPossible comes from the CURRENT exam question bank, but a
-      // student's stored r.exam score may have been earned against an
-      // older version of that bank (more questions, or higher marks)
-      // that's since been edited down by the teacher. When that
-      // happens the same, perfectly correct stored score computes
-      // against a now-smaller total — e.g. a 70/100 score against a
-      // bank that's since shrunk to 5 marks total prints as 1400%.
-      // There's no reliable historical "total marks at submission
-      // time" recorded anywhere to compute this correctly for every
-      // case, so this clamp is a hard backstop: a percentage can never
-      // be genuinely below 0 or above 100, so neither is ever shown to
-      // a parent, regardless of how the underlying question bank has
-      // changed since.
-      const rawPercentage = maxPossible > 0 ? (r.exam / maxPossible) * 100 : null;
+      // The real bug: this used to divide by the LIVE exam question
+      // bank's summed marks — a number that has nothing to do with
+      // the score's actual scale. r.exam is capped at submission time
+      // (see the /exam/submit route: `score = Math.min(score,
+      // SCORE_CAPS.exam)`) to SCORE_CAPS.exam, which — together with
+      // test1+test2+test3 (10+10+10) — is the school's actual 100-mark
+      // grading convention: 30% continuous assessment + 70% exam.
+      // SCORE_CAPS.exam (70) IS the exam's real, fixed full-marks
+      // value; it was never meant to be derived from how many
+      // questions currently exist or what their live marks add up to.
+      // Dividing by the live question bank instead explains both
+      // symptoms seen: whenever that live total happened to be
+      // smaller than a student's score, the result exceeded 100%
+      // (showing values like 1400%); after clamping the result to
+      // 0–100 as a stopgap, the same mismatch meant nearly every
+      // score got clamped down to a flat 100%, hiding real variation
+      // entirely. Dividing by the fixed constant instead is correct
+      // by construction and needs no clamp as a workaround — though
+      // the clamp stays in as a harmless backstop regardless.
+      const examMaxMarks = SCORE_CAPS.exam;
+      const rawPercentage = examMaxMarks > 0 ? (r.exam / examMaxMarks) * 100 : null;
       const percentage = rawPercentage === null ? null : Number(Math.min(100, Math.max(0, rawPercentage)).toFixed(1));
       subjectRows.push({ subjectName, examScore: r.exam, percentage });
       if (percentage !== null) {
@@ -4278,10 +4283,16 @@ app.post('/api/exam/submit', preventMultipleSubmissions, async (req, res) => {
       (sum, q) => sum + (Number(q.marks) || 1),
       0
     );
-    const percentage =
-      totalPossible > 0
-        ? Number(((score / totalPossible) * 100).toFixed(2))
-        : 0;
+    // The old percentage calc used to live here, computed from the raw
+    // (not-yet-capped) score against the raw question-bank total. But
+    // a few lines below, `score` gets capped to the school's actual
+    // grading scale (SCORE_CAPS) — so that percentage was already
+    // wrong before the response was even built: it reflected a score
+    // the student's own receipt would then show as something smaller.
+    // The correct total/percentage (using the same fixed grading-scale
+    // denominator the parent-portal summary now uses) is computed
+    // further below, once the capped score is actually known — see
+    // gradedTotal/percentage after the updateData() call.
 
     // Score is saved FIRST, immediately, using the same race-free
     // update path the manual score-entry grid uses — before this fix,
@@ -4331,6 +4342,19 @@ app.post('/api/exam/submit', preventMultipleSubmissions, async (req, res) => {
       existing.updatedAt = new Date().toISOString();
     }, ['results']); // only the results table needs re-saving here
 
+    // Computed here, AFTER score has been capped above, using the
+    // same fixed grading-scale denominator the parent-portal Exam
+    // Summary uses (SCORE_CAPS[type]) rather than the live, raw
+    // question-bank total — so the score, its "out of" total, and its
+    // percentage always agree with each other on this student's own
+    // confirmation screen, on their downloadable receipt PDF, and
+    // later on the parent portal's summary, for the exact same
+    // submission. Falls back to the raw totalPossible only for a type
+    // with no defined cap (shouldn't happen for test1/test2/test3/exam,
+    // but keeps this safe if a new type is ever added without one).
+    const gradedTotal = SCORE_CAPS[type] ?? totalPossible;
+    const percentage = gradedTotal > 0 ? Number(((score / gradedTotal) * 100).toFixed(2)) : 0;
+
     // Regenerate this student's persistent, parent-facing summary PDF
     // for whichever category this submission belongs to. Wrapped so a
     // PDF problem never takes the score down with it — the score is
@@ -4348,7 +4372,7 @@ app.post('/api/exam/submit', preventMultipleSubmissions, async (req, res) => {
       subject: subj.name,
       items: itemsWithAns,
       score,
-      total: totalPossible,
+      total: gradedTotal,
       percentage,
     };
 
@@ -4369,7 +4393,7 @@ app.post('/api/exam/submit', preventMultipleSubmissions, async (req, res) => {
         return res.json({
           success: true,
           score,
-          total: totalPossible,
+          total: gradedTotal,
           percentage,
           pdf: null,
           warning: 'Result saved, but the PDF could not be generated.',
@@ -4384,7 +4408,7 @@ app.post('/api/exam/submit', preventMultipleSubmissions, async (req, res) => {
         return res.json({
           success: true,
           score,
-          total: totalPossible,
+          total: gradedTotal,
           percentage,
           pdf: null,
           warning: 'Result saved, but the PDF could not be stored.',
@@ -4407,7 +4431,7 @@ app.post('/api/exam/submit', preventMultipleSubmissions, async (req, res) => {
           res.json({
             success: true,
             score,
-            total: totalPossible,
+            total: gradedTotal,
             percentage,
             pdf: relPath,
           });
@@ -4418,7 +4442,7 @@ app.post('/api/exam/submit', preventMultipleSubmissions, async (req, res) => {
           res.json({
             success: true,
             score,
-            total: totalPossible,
+            total: gradedTotal,
             percentage,
             pdf: relPath,
             warning: 'Result saved, but the PDF record could not be stored.',
