@@ -295,6 +295,14 @@ function generateReportPDF(meta, student, reportData, outPath, callback) {
     doc.text("Principal's Signature:",350,y);
 
     // Teacher signature
+    // meta.teacherSignature may already be a genuine, existing absolute
+    // temp path — resolved ahead of time in server.js (withResolvedImages
+    // downloads the class's Supabase Storage signature URL to a local
+    // file before this function is ever called), exactly the same
+    // pattern already used above for the logo. That must be checked
+    // FIRST: joining an already-absolute path onto __dirname/.. (the old
+    // behaviour below) silently produces a path that never exists, which
+    // is why the signature was never actually rendering.
     let teacherSigPath = null;
     if (student.classId) {
       const sigFile = `${student.classId}_signature.png`;
@@ -305,7 +313,9 @@ function generateReportPDF(meta, student, reportData, outPath, callback) {
     }
 
     if (!teacherSigPath && meta.teacherSignature) {
-      teacherSigPath = path.join(__dirname,"..", meta.teacherSignature.replace(/^\//,""));
+      teacherSigPath = fs.existsSync(meta.teacherSignature)
+        ? meta.teacherSignature
+        : path.join(__dirname, "..", meta.teacherSignature.replace(/^\//, ""));
     }
 
     if (teacherSigPath && fs.existsSync(teacherSigPath)) {
@@ -314,24 +324,15 @@ function generateReportPDF(meta, student, reportData, outPath, callback) {
       doc.text("____________________________",160,y);
     }
 
-  // Principal signature
-let principalPath = meta.signaturePrincipal || "/uploads/principal_signature.png";
-
-// Correct path: convert /uploads/... to public/uploads/...
-if (principalPath.startsWith("/uploads")) {
-  principalPath = path.join("public", principalPath.replace(/^\//, ""));
-}
-
-// Resolve absolute path
-const principalSig = path.join(__dirname, "..", principalPath);
-
-// Debug: print path
-console.log("Principal Signature Path:", principalSig);
+  // Principal signature — same already-resolved-path-first fix as above.
+  let principalPath = meta.signaturePrincipal || "/uploads/principal_signature.png";
+  const principalSig = fs.existsSync(principalPath)
+    ? principalPath
+    : path.join(__dirname, "..", "public", principalPath.replace(/^\//, ""));
 
 if (fs.existsSync(principalSig)) {
   doc.image(principalSig, 350, y + 15, { width: 80, height: 40 });
 } else {
-  console.log("Signature NOT FOUND!");
   doc.text("____________________", 350, y + 15);
 }
 

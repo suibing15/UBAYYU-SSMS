@@ -63,6 +63,26 @@ async function loadFromDatabase() {
   ]);
 
   const s = settingsRes.rows[0] || {};
+
+  // A school whose settings row was created without these keys ever
+  // being seeded ends up with portal_toggles = {} (or a partial
+  // object) in Postgres. The admin panel's "Portal Toggles" card
+  // renders one button per key in this object — with zero keys, it
+  // renders nothing at all, and looks like the card is simply broken.
+  // Defaulting every known toggle to true here, then letting whatever
+  // was actually saved override those defaults, guarantees the full
+  // set of toggle buttons always appears — for every school, including
+  // ones whose row predates a given toggle being added. Nothing here
+  // touches Postgres directly; the very next time any single toggle is
+  // flipped, writeData(['settings']) persists this complete merged
+  // object back, so the row self-heals on first use.
+  const DEFAULT_PORTAL_TOGGLES = {
+    teacherPortal: true,
+    examPortal: true,
+    reportPortal: true,
+    parentPortal: true,
+    attendancePortal: true
+  };
   const meta = {
     schoolName: s.school_name,
     address: s.address,
@@ -73,7 +93,7 @@ async function loadFromDatabase() {
     nextTermBegins: s.next_term_begins,
     logo: s.logo_path,
     signaturePrincipal: s.signature_principal_path,
-    portalToggles: s.portal_toggles || {},
+    portalToggles: { ...DEFAULT_PORTAL_TOGGLES, ...(s.portal_toggles || {}) },
     portalPasswords: s.portal_passwords || {},
     testToggles: s.test_toggles || {},
     unlockPasswordHash: s.unlock_password_hash

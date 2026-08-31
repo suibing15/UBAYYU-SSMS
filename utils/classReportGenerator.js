@@ -183,6 +183,14 @@ function generateClassReportPDF(meta, students, results, subjects, outPath, call
       doc.text("Principal's Signature:", 350, sigY);
 
     // ===== TEACHER SIGNATURE (MATCH PER-STUDENT LOGIC) =====
+// meta.teacherSignature may already be a genuine, existing absolute
+// temp path — resolved ahead of time in server.js (withResolvedImages
+// downloads the class's Supabase Storage signature URL to a local
+// file before this function is ever called), same pattern already
+// used above for the logo. That must be checked FIRST: joining an
+// already-absolute path onto __dirname/.. (the old behaviour) silently
+// produces a path that never exists, which is why the signature was
+// never actually rendering.
 let teacherSigPath = null;
 
 if (st.classId) {
@@ -206,11 +214,9 @@ if (st.classId) {
 
 // fallback from meta
 if (!teacherSigPath && meta.teacherSignature) {
-  teacherSigPath = path.join(
-    __dirname,
-    "..",
-    meta.teacherSignature.replace(/^\//, "")
-  );
+  teacherSigPath = fs.existsSync(meta.teacherSignature)
+    ? meta.teacherSignature
+    : path.join(__dirname, "..", meta.teacherSignature.replace(/^\//, ""));
 }
 
 // draw
@@ -224,7 +230,11 @@ if (teacherSigPath && fs.existsSync(teacherSigPath)) {
 }
 
 
-      const principalSig = path.join(__dirname, "..", "public", (meta.signaturePrincipal || "/uploads/principal_signature.png").replace(/^\//, ""));
+      // Principal signature — same already-resolved-path-first fix.
+      const principalPathRaw = meta.signaturePrincipal || "/uploads/principal_signature.png";
+      const principalSig = fs.existsSync(principalPathRaw)
+        ? principalPathRaw
+        : path.join(__dirname, "..", "public", principalPathRaw.replace(/^\//, ""));
       if (fs.existsSync(principalSig)) doc.image(principalSig,350,sigY+15,{width:80,height:40});
 
       doc.font("Helvetica").fontSize(8)
@@ -301,6 +311,7 @@ doc.text("Teacher's Signature:", 60, sigSY);
 doc.text("Principal's Signature:", 350, sigSY);
 
 /* ===== TEACHER SIGNATURE (SUMMARY PAGE – FIXED & SAFE) ===== */
+// Same already-resolved-path-first fix as the per-student block above.
 let teacherSigPath = null;
 const classId = meta.classId || meta.className;
 
@@ -315,11 +326,9 @@ if (classId) {
 }
 
 if (!teacherSigPath && meta.teacherSignature) {
-  teacherSigPath = path.join(
-    __dirname,
-    "..",
-    meta.teacherSignature.replace(/^\//, "")
-  );
+  teacherSigPath = fs.existsSync(meta.teacherSignature)
+    ? meta.teacherSignature
+    : path.join(__dirname, "..", meta.teacherSignature.replace(/^\//, ""));
 }
 
 if (teacherSigPath && fs.existsSync(teacherSigPath)) {
@@ -329,7 +338,10 @@ if (teacherSigPath && fs.existsSync(teacherSigPath)) {
 }
 
 /* ----- PRINCIPAL SIGNATURE ----- */
-const pSig = path.join(__dirname, "..", "public", (meta.signaturePrincipal || "/uploads/principal_signature.png").replace(/^\//, ""));
+const principalPathRawSummary = meta.signaturePrincipal || "/uploads/principal_signature.png";
+const pSig = fs.existsSync(principalPathRawSummary)
+  ? principalPathRawSummary
+  : path.join(__dirname, "..", "public", principalPathRawSummary.replace(/^\//, ""));
 if (fs.existsSync(pSig)) {
   doc.image(pSig, 350, sigSY + 15, { width: 80, height: 40 });
 }
