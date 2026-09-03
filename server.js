@@ -347,7 +347,7 @@ const brandingUpload = multer({
 const { generateQuestionPDF } = require("./utils/questionPdfGenerator");
 const reportGuard = require("./middleware/reportGuard");
 const { readData, writeData, updateData } = require("./utils/dataStore");
-const { uploadBuffer, uploadLocalFileAndCleanup, tempPdfPath, deleteFromStorage, resolveImageForGeneration, withResolvedImages, withResolvedImagesForMany, withResolvedFieldForMany } = require("./utils/storage");
+const { uploadBuffer, uploadLocalFileAndCleanup, tempPdfPath, deleteFromStorage, storagePathFromUrl, resolveImageForGeneration, withResolvedImages, withResolvedImagesForMany, withResolvedFieldForMany } = require("./utils/storage");
 const { requireActiveSchool, startRegistryHeartbeat } = require("./utils/registryCheck");
 const { generateExamPDF, generateConsolidatedResultPDF } = require("./utils/pdfGenerator");
 const { generateReportPDF } = require("./utils/reportGenerator");
@@ -789,7 +789,7 @@ app.get('/manage/admin-ui.js', requireAdmin, (req, res) => {
 app.post('/api/manage-unlock', (req, res) => {
   const { key } = req.body;
 
-  if (key === 'UBAYYU') {
+  if (key === 'ASSLM') {
     req.session.isAdmin = true;
     return res.json({ success: true });
   }
@@ -3312,10 +3312,36 @@ app.delete("/api/admin/reports/all", async (req, res) => {
   try {
     const data = readData();
     const countBefore = (data.results || []).length;
-    data.results = [];
-    await writeData(data, ['results']);
 
-    // Also clear any locally-generated report PDF files
+    // Every report sheet, consolidated summary, and exam/test receipt
+    // this school has ever generated lives in the Supabase Storage
+    // bucket, not on local disk. Previously this route only cleared
+    // the `results` table and a local "reports" folder left over from
+    // before the Storage migration (which doesn't exist on Render any
+    // more, so that part silently did nothing) — meaning every one of
+    // these files stayed in the bucket forever, orphaned, even after
+    // "clearing all report data." deleteFromStorage() already existed
+    // for exactly this but was never actually called anywhere in the
+    // app. This now genuinely removes each file before dropping its
+    // database row. A failed individual delete is logged and skipped
+    // rather than aborting the whole operation — deleteFromStorage()
+    // already swallows its own errors for this reason.
+    const reportPdfTypes = ['report_sheet', 'tests_summary', 'exam_summary', 'exam_result'];
+    const pdfsToDelete = (data.pdfs || []).filter(p => reportPdfTypes.includes(p.type));
+
+    await Promise.all(
+      pdfsToDelete.map((p) => {
+        const storagePath = storagePathFromUrl(p.filePath);
+        return storagePath ? deleteFromStorage(storagePath) : Promise.resolve();
+      })
+    );
+
+    data.results = [];
+    data.pdfs = (data.pdfs || []).filter(p => !reportPdfTypes.includes(p.type));
+    await writeData(data, ['results', 'pdfs']);
+
+    // Old local-disk cleanup kept as a harmless defensive fallback —
+    // does nothing on Render today, but costs nothing to leave in.
     const reportDir = path.join(__dirname, "reports");
     let deletedFiles = 0;
     if (fs.existsSync(reportDir)) {
@@ -3327,7 +3353,12 @@ app.delete("/api/admin/reports/all", async (req, res) => {
       });
     }
 
-    res.json({ success: true, resultsCleared: countBefore, filesDeleted: deletedFiles });
+    res.json({
+      success: true,
+      resultsCleared: countBefore,
+      pdfsDeletedFromStorage: pdfsToDelete.length,
+      filesDeleted: deletedFiles
+    });
   } catch (err) {
     console.error("Delete all reports error:", err);
     res.status(500).json({ error: "Failed to delete all report data" });
@@ -3339,8 +3370,24 @@ app.delete("/api/teacher/student/:studentId/report", async (req, res) => {
     const { studentId } = req.params;
     const data = readData();
 
-    // Delete any report PDFs belonging to this student, still on local
-    // disk for now (this will move to Storage in a later pass).
+    // Same fix as /api/admin/reports/all above — this student's report
+    // PDFs actually live in Supabase Storage, not the local disk folder
+    // this used to (and only) clean up, which meant every one of them
+    // stayed in the bucket forever after being "cleaned."
+    const reportPdfTypes = ['report_sheet', 'tests_summary', 'exam_summary', 'exam_result'];
+    const pdfsToDelete = (data.pdfs || []).filter(
+      (p) => p.studentId === studentId && reportPdfTypes.includes(p.type)
+    );
+
+    await Promise.all(
+      pdfsToDelete.map((p) => {
+        const storagePath = storagePathFromUrl(p.filePath);
+        return storagePath ? deleteFromStorage(storagePath) : Promise.resolve();
+      })
+    );
+
+    // Old local-disk cleanup kept as a harmless defensive fallback —
+    // does nothing on Render today, but costs nothing to leave in.
     const reportDir = path.join(__dirname, "reports");
     const deleted = [];
     if (fs.existsSync(reportDir)) {
@@ -3352,9 +3399,12 @@ app.delete("/api/teacher/student/:studentId/report", async (req, res) => {
       });
     }
 
-    // Clean all results for this student
+    // Clean all results and pdfs records for this student
     data.results = (data.results || []).filter((r) => r.studentId !== studentId);
-    await writeData(data, ['results']);
+    data.pdfs = (data.pdfs || []).filter(
+      (p) => !(p.studentId === studentId && reportPdfTypes.includes(p.type))
+    );
+    await writeData(data, ['results', 'pdfs']);
 
     console.log(`🧹 Cleaned old test/exam records for student ${studentId}`);
     res.json({ success: true, deleted });
@@ -3895,27 +3945,33 @@ function buildCombinedReportContext(data, classId) {
     return { error: "Class not found.", status: 404 };
   }
 
+  // ✅ ALWAYS resolve full subject list
   const subjects = getClassSubjectsResolved(data, classEntry.id);
   if (!subjects.length) {
     return { error: "No subjects configured for this class yet.", status: 404 };
   }
+  const subjectIds = subjects.map(s => s.id);
   const subjectCount = subjects.length || 1; // prevent division by zero
 
   // =========================
   // CALCULATE TOTALS & RANK (MATCH REPORT SHEET LOGIC)
   // =========================
   students.forEach(s => {
+
     let totalScore = 0;
+
     subjects.forEach(sub => {
       const r = (data.results || []).find(
         x => x.studentId === s.id && x.subject === sub.id
       ) || {};
+
       totalScore +=
         (r.test1 || 0) +
         (r.test2 || 0) +
         (r.test3 || 0) +
         (r.exam  || 0);
     });
+
     s.totalScore = totalScore;
     s.average = totalScore / subjectCount; // ✅ SAME AS REPORT SHEET
   });
@@ -3934,8 +3990,11 @@ function buildCombinedReportContext(data, classId) {
     s.position = `${i + 1}${suffix(i + 1)}`;
   });
 
+  // =========================
+  // META
+  // =========================
   const meta = {
-    ...(data.meta || {}),
+    ...(data.meta || {}), // real school branding: address, motto, phone, logo, signaturePrincipal, nextTermBegins, etc.
     schoolName: data.meta?.schoolName || "ASSALAM INTERNATIONAL ACADEMIC SCHOOL",
     className: classId,
     term: data.meta?.term || "Third Term",
@@ -3945,12 +4004,13 @@ function buildCombinedReportContext(data, classId) {
     // teacher uploads their signature — data.meta never carries this
     // (it's a per-class value, not a global setting), so without this
     // it's silently missing from every combined class report, the same
-    // bug fixed for the individual per-student reports above.
+    // bug fixed for the individual per-student reports below.
     teacherSignature: classEntry.teacherSignature || null
   };
 
   return { students, subjects, meta };
 }
+
 
 // ---------------- SIGNATURE UPLOAD ROUTES ----------------
 
@@ -4164,15 +4224,12 @@ async function regenerateConsolidatedPDF(studentId, category) {
       // SCORE_CAPS.exam (70) IS the exam's real, fixed full-marks
       // value; it was never meant to be derived from how many
       // questions currently exist or what their live marks add up to.
-      // Dividing by the live question bank instead explains both
-      // symptoms seen: whenever that live total happened to be
-      // smaller than a student's score, the result exceeded 100%
-      // (showing values like 1400%); after clamping the result to
-      // 0–100 as a stopgap, the same mismatch meant nearly every
-      // score got clamped down to a flat 100%, hiding real variation
-      // entirely. Dividing by the fixed constant instead is correct
-      // by construction and needs no clamp as a workaround — though
-      // the clamp stays in as a harmless backstop regardless.
+      // Dividing by the live question bank instead means: whenever
+      // that live total happened to be smaller than a student's score,
+      // the result exceeded 100% (showing absurd values like 1400%).
+      // Dividing by the fixed constant instead is correct by
+      // construction — the clamp below stays in as a harmless backstop
+      // regardless.
       const examMaxMarks = SCORE_CAPS.exam;
       const rawPercentage = examMaxMarks > 0 ? (r.exam / examMaxMarks) * 100 : null;
       const percentage = rawPercentage === null ? null : Number(Math.min(100, Math.max(0, rawPercentage)).toFixed(1));
@@ -4374,7 +4431,22 @@ app.post('/api/exam/submit', preventMultipleSubmissions, async (req, res) => {
       console.error('regenerateConsolidatedPDF error:', pdfErr);
     }
 
-    const filename = `exam_${type}_${studentId}_${Date.now()}.pdf`;
+    // Filename deliberately has NO timestamp and DOES include subjectId.
+    // The old version (exam_${type}_${studentId}_${Date.now()}.pdf, no
+    // subjectId at all) meant every single sitting — every retake, of
+    // every subject — created a brand-new permanent file in Storage,
+    // with nothing anywhere in the app that ever cleaned an old one up.
+    // For a real school that's every student × every subject × every
+    // test type × every attempt, forever. Using a fixed, deterministic
+    // name per (student, subject, type) and uploading with upsert:true
+    // means a retake correctly REPLACES the previous attempt's receipt
+    // at the same path — which is also the more correct product
+    // behavior, since the current attempt is what should be on file,
+    // not a permanent stack of every past one. subjectId has to be
+    // part of the name now that it's no longer timestamp-unique,
+    // otherwise two different subjects' receipts for the same student
+    // would collide onto the same path and silently overwrite each other.
+    const filename = `exam_${type}_${subjectId}.pdf`;
     const localPath = tempPdfPath(filename);
     const examMeta = {
       type,
@@ -4426,15 +4498,28 @@ app.post('/api/exam/submit', preventMultipleSubmissions, async (req, res) => {
 
       updateData((liveData) => {
         if (!liveData.pdfs) liveData.pdfs = [];
-        liveData.pdfs.push({
-          id: `pdf_${Date.now()}`,
-          type: 'exam_result',
-          studentId,
-          filePath: relPath,
-          timestamp: new Date().toISOString(),
-          subject: subj.name,
-          examType: type,
-        });
+        // Same reasoning as the storage path above: update the existing
+        // record for this exact student+subject+type instead of always
+        // pushing a new one, so the pdfs table stays bounded too and
+        // never holds a stale entry pointing at an attempt that's since
+        // been overwritten in Storage.
+        const existing = liveData.pdfs.find(
+          (p) => p.type === 'exam_result' && p.studentId === studentId && p.subject === subj.name && p.examType === type
+        );
+        if (existing) {
+          existing.filePath = relPath;
+          existing.timestamp = new Date().toISOString();
+        } else {
+          liveData.pdfs.push({
+            id: `pdf_exam_result_${studentId}_${subjectId}_${type}`,
+            type: 'exam_result',
+            studentId,
+            filePath: relPath,
+            timestamp: new Date().toISOString(),
+            subject: subj.name,
+            examType: type,
+          });
+        }
       }, ['pdfs']) // only the pdfs table needs re-saving here
         .then(() => {
           res.json({
@@ -4775,4 +4860,3 @@ for (const name of Object.keys(interfaces)) {
     }
   }
 }
-

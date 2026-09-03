@@ -72,6 +72,22 @@ async function deleteFromStorage(storagePath) {
   }
 }
 
+// Every filePath saved anywhere in this app (pdfs table entries, etc.)
+// is the FULL public URL returned by uploadBuffer() — e.g.
+// "https://xxxxx.supabase.co/storage/v1/object/public/{bucket}/reports/nur1/UB000_report.pdf"
+// — not the bucket-relative path deleteFromStorage() above actually
+// needs ("reports/nur1/UB000_report.pdf"). This pulls that relative
+// path back out. Returns null for anything that doesn't look like one
+// of this school's own Storage URLs, so a caller can safely skip it
+// rather than attempt a delete with a garbage path.
+function storagePathFromUrl(url) {
+  if (!url) return null;
+  const marker = `/object/public/${SCHOOL_BUCKET}/`;
+  const idx = url.indexOf(marker);
+  if (idx === -1) return null;
+  return url.slice(idx + marker.length);
+}
+
 // Every PDF generator (reportGenerator.js, pdfGenerator.js, etc.)
 // expects a real *local file path* for a logo, a student's photo, or
 // a signature — that's what they were built and carefully tested
@@ -114,7 +130,7 @@ async function resolveImageForGeneration(urlOrPath) {
   return { path: localPath, cleanup: () => fs.unlink(localPath, () => {}) };
 }
 
-module.exports = { uploadBuffer, uploadLocalFileAndCleanup, tempPdfPath, deleteFromStorage, resolveImageForGeneration, withResolvedImages, withResolvedImagesForMany, withResolvedFieldForMany };
+module.exports = { uploadBuffer, uploadLocalFileAndCleanup, tempPdfPath, deleteFromStorage, storagePathFromUrl, resolveImageForGeneration, withResolvedImages, withResolvedImagesForMany, withResolvedFieldForMany };
 
 // Generic version of withResolvedImagesForMany for any field name —
 // question papers resolve each question's own "image" field, not a
