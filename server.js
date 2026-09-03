@@ -685,6 +685,15 @@ const FREEZE_ALLOWLIST = [
   "/manage",
   "/api/admin",
   "/api/system",
+  // The admin Settings page fetches /api/meta alongside /api/system/status
+  // in a single Promise.all — without this, freezing made /api/meta start
+  // returning 503, which made that whole Promise.all reject and silently
+  // discard the systemStatus() result too. That left the frontend's
+  // "locked" state stuck at false, so the unlock password field never
+  // appeared even though the freeze had genuinely worked. School branding
+  // is informational, not one of the portals freezing is meant to pause,
+  // so it stays readable regardless of lock state.
+  "/api/meta",
   "/broadcast.js",
   "/public/sounds",
   "/index.html",
