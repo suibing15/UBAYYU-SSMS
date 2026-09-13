@@ -353,6 +353,7 @@ const { generateExamPDF, generateConsolidatedResultPDF } = require("./utils/pdfG
 const { generateReportPDF } = require("./utils/reportGenerator");
 const { generateClassReportPDF } = require("./utils/classReportGenerator");
 const { generateIDCard } = require("./utils/idCardGenerator");
+const { generateCBTCredentialsPDF } = require("./utils/cbtCredentialsGenerator");
 const {
   generateClassAttendancePDF,
   generateTeacherAttendancePDF
@@ -789,7 +790,7 @@ app.get('/manage/admin-ui.js', requireAdmin, (req, res) => {
 app.post('/api/manage-unlock', (req, res) => {
   const { key } = req.body;
 
-  if (key === 'ASSLM') {
+  if (key === 'UBAYYU') {
     req.session.isAdmin = true;
     return res.json({ success: true });
   }
@@ -2432,6 +2433,102 @@ app.post("/api/admin/idcards/students/bulk", async (req, res) => {
 });
 
 // ======================================================
+// RESET & PRINT CBT LOGIN CREDENTIALS (ADMIN ONLY)
+// ======================================================
+// Generates a fresh, random 4-digit CBT password for every student in
+// each selected class, saves it the normal secure (hashed) way, and
+// prints exactly one PDF listing every affected class — student ID,
+// name, and the real password — with the principal's signature, while
+// the plaintext value is still known. This is a genuine password
+// RESET, not a lookup: a real plaintext password can never be
+// recovered once hashed, by design, so this is the only way to
+// legitimately "know" a student's current password again. Any student
+// who already knew their old password will need this new printed
+// sheet going forward.
+//
+// The generated PDF is deliberately streamed straight to the browser
+// and never uploaded to Supabase Storage — unlike most other generated
+// PDFs in this app, this one is a live listing of real, current
+// passwords, and keeping a copy anywhere longer than the download
+// itself is a real exposure risk with no benefit.
+app.post("/api/admin/students/reset-cbt-credentials", async (req, res) => {
+  if (!req.session.admin) return res.status(401).json({ error: "Admin login required" });
+
+  try {
+    const classIds = Array.isArray(req.body?.classIds) ? req.body.classIds : [];
+    if (!classIds.length) {
+      return res.status(400).json({ error: "Select at least one class." });
+    }
+
+    const data = readData();
+    const classesWithStudents = [];
+    const plaintextByStudentId = {};
+
+    for (const classId of classIds) {
+      const cls = (data.classes || []).find((c) => c.id === classId);
+      if (!cls) continue;
+      const studentsInClass = (data.students || []).filter((s) => s.classId === classId);
+      if (!studentsInClass.length) continue;
+
+      const studentEntries = studentsInClass.map((s) => {
+        // 4 random digits (1000-9999) — short enough for a young
+        // student to type easily, random rather than sequential so one
+        // student's password gives no hint toward a classmate's.
+        const plain = String(Math.floor(1000 + Math.random() * 9000));
+        plaintextByStudentId[s.id] = plain;
+        return { id: s.id, name: s.name, password: plain };
+      });
+
+      classesWithStudents.push({ className: cls.name, students: studentEntries });
+    }
+
+    if (!classesWithStudents.length) {
+      return res.status(404).json({ error: "No students found in the selected classes." });
+    }
+
+    // Hash and persist every new password before anything else, so the
+    // printed sheet about to be generated is the only place the
+    // plaintext value exists once this request finishes.
+    await updateData((liveData) => {
+      for (const s of liveData.students || []) {
+        if (plaintextByStudentId[s.id]) {
+          s.password = bcrypt.hashSync(plaintextByStudentId[s.id], 10);
+        }
+      }
+    }, ['students']);
+
+    const localPath = tempPdfPath(`CBT_Credentials_${Date.now()}.pdf`);
+    const logoResolved = await withResolvedImages(data.meta || {});
+
+    generateCBTCredentialsPDF(logoResolved.meta, classesWithStudents, localPath, (err) => {
+      logoResolved.cleanup();
+
+      if (err) {
+        console.error("CBT credentials PDF error:", err);
+        if (!res.headersSent) res.status(500).json({ error: "PDF generation failed." });
+        fs.unlink(localPath, () => {});
+        return;
+      }
+
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="CBT_Credentials.pdf"`);
+
+      const stream = fs.createReadStream(localPath);
+      stream.on("error", (streamErr) => {
+        console.error("CBT credentials stream error:", streamErr);
+        if (!res.headersSent) res.status(500).json({ error: "Failed to stream credentials." });
+        fs.unlink(localPath, () => {});
+      });
+      res.on("close", () => fs.unlink(localPath, () => {}));
+      stream.pipe(res);
+    });
+  } catch (err) {
+    console.error("Reset CBT credentials error:", err);
+    res.status(500).json({ error: "Server error." });
+  }
+});
+
+// ======================================================
 // BULK TEACHER ID CARDS (ONE COMBINED PDF – ADMIN ONLY)
 // ======================================================
 // Accepts an optional list of specific teacher IDs; with none given,
@@ -3945,33 +4042,27 @@ function buildCombinedReportContext(data, classId) {
     return { error: "Class not found.", status: 404 };
   }
 
-  // ✅ ALWAYS resolve full subject list
   const subjects = getClassSubjectsResolved(data, classEntry.id);
   if (!subjects.length) {
     return { error: "No subjects configured for this class yet.", status: 404 };
   }
-  const subjectIds = subjects.map(s => s.id);
   const subjectCount = subjects.length || 1; // prevent division by zero
 
   // =========================
   // CALCULATE TOTALS & RANK (MATCH REPORT SHEET LOGIC)
   // =========================
   students.forEach(s => {
-
     let totalScore = 0;
-
     subjects.forEach(sub => {
       const r = (data.results || []).find(
         x => x.studentId === s.id && x.subject === sub.id
       ) || {};
-
       totalScore +=
         (r.test1 || 0) +
         (r.test2 || 0) +
         (r.test3 || 0) +
         (r.exam  || 0);
     });
-
     s.totalScore = totalScore;
     s.average = totalScore / subjectCount; // ✅ SAME AS REPORT SHEET
   });
@@ -3990,11 +4081,8 @@ function buildCombinedReportContext(data, classId) {
     s.position = `${i + 1}${suffix(i + 1)}`;
   });
 
-  // =========================
-  // META
-  // =========================
   const meta = {
-    ...(data.meta || {}), // real school branding: address, motto, phone, logo, signaturePrincipal, nextTermBegins, etc.
+    ...(data.meta || {}),
     schoolName: data.meta?.schoolName || "ASSALAM INTERNATIONAL ACADEMIC SCHOOL",
     className: classId,
     term: data.meta?.term || "Third Term",
@@ -4004,13 +4092,12 @@ function buildCombinedReportContext(data, classId) {
     // teacher uploads their signature — data.meta never carries this
     // (it's a per-class value, not a global setting), so without this
     // it's silently missing from every combined class report, the same
-    // bug fixed for the individual per-student reports below.
+    // bug fixed for the individual per-student reports above.
     teacherSignature: classEntry.teacherSignature || null
   };
 
   return { students, subjects, meta };
 }
-
 
 // ---------------- SIGNATURE UPLOAD ROUTES ----------------
 
@@ -4224,12 +4311,15 @@ async function regenerateConsolidatedPDF(studentId, category) {
       // SCORE_CAPS.exam (70) IS the exam's real, fixed full-marks
       // value; it was never meant to be derived from how many
       // questions currently exist or what their live marks add up to.
-      // Dividing by the live question bank instead means: whenever
-      // that live total happened to be smaller than a student's score,
-      // the result exceeded 100% (showing absurd values like 1400%).
-      // Dividing by the fixed constant instead is correct by
-      // construction — the clamp below stays in as a harmless backstop
-      // regardless.
+      // Dividing by the live question bank instead explains both
+      // symptoms seen: whenever that live total happened to be
+      // smaller than a student's score, the result exceeded 100%
+      // (showing values like 1400%); after clamping the result to
+      // 0–100 as a stopgap, the same mismatch meant nearly every
+      // score got clamped down to a flat 100%, hiding real variation
+      // entirely. Dividing by the fixed constant instead is correct
+      // by construction and needs no clamp as a workaround — though
+      // the clamp stays in as a harmless backstop regardless.
       const examMaxMarks = SCORE_CAPS.exam;
       const rawPercentage = examMaxMarks > 0 ? (r.exam / examMaxMarks) * 100 : null;
       const percentage = rawPercentage === null ? null : Number(Math.min(100, Math.max(0, rawPercentage)).toFixed(1));
@@ -4860,3 +4950,4 @@ for (const name of Object.keys(interfaces)) {
     }
   }
 }
+
