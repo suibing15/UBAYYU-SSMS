@@ -663,6 +663,20 @@ hr { border: none; border-top: 1px solid var(--line); margin: 16px 0; }
       </p>
     </div>
 
+    <!-- CBT Credentials -->
+    <div class="panel">
+      <button class="primary" onclick="resetCbtCredentials()">
+        🔑 Reset &amp; Print CBT Credentials
+      </button>
+      <p class="promote-hint">
+        Generates a fresh CBT login password for every student in the class(es) you choose,
+        saves it securely, and gives you one PDF listing each class's students with their
+        real password and the principal's signature — so no one needs to ask a student what
+        their password is. This replaces their current password; it can't be undone.
+      </p>
+      <div id="cbtCredentialsStatus" style="margin-top:10px;font-size:13px;padding:8px 10px;border-radius:8px;background:var(--card-2);border:1px solid var(--line);color:var(--text);"></div>
+    </div>
+
     <!-- Bulk Receipt Generator -->
     <div class="card">
       <div class="card-header" style="cursor:default;">

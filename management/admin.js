@@ -1085,6 +1085,73 @@ window.bulkPromoteStudents = async function () {
   window.loadStudents();
 };
 
+window.resetCbtCredentials = async function () {
+  const raw = prompt(
+    "Enter class ID(s) to reset, separated by commas — or type ALL for every class"
+  );
+  if (!raw) return;
+
+  const trimmed = raw.trim();
+  let classIds;
+  if (trimmed.toUpperCase() === "ALL") {
+    const r = await fetch("/api/admin/classes", { credentials: "include" });
+    if (!r.ok) {
+      alert("Couldn't load the class list — try again.");
+      return;
+    }
+    const { classes } = await r.json();
+    classIds = (classes || []).map(c => c.id);
+    if (!classIds.length) {
+      alert("No classes found.");
+      return;
+    }
+  } else {
+    classIds = trimmed.split(",").map(s => s.trim()).filter(Boolean);
+  }
+
+  if (!classIds.length) return;
+
+  if (!confirm(
+    `Reset CBT passwords for every student in: ${classIds.join(", ")}?\n\n` +
+    `This replaces their current passwords with new ones — anyone who already ` +
+    `knows their old password will need the printed sheet to log in again. ` +
+    `This cannot be undone.`
+  )) return;
+
+  const status = document.getElementById("cbtCredentialsStatus");
+  if (status) status.innerHTML = "⏳ Generating credentials…";
+
+  try {
+    const res = await fetch("/api/admin/students/reset-cbt-credentials", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ classIds })
+    });
+
+    if (!res.ok) {
+      const j = await res.json().catch(() => ({}));
+      throw new Error(j.error || "Failed to reset CBT credentials");
+    }
+
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "CBT_Credentials.pdf";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+
+    if (status) status.innerHTML = "✅ Credentials reset and downloaded successfully";
+  } catch (err) {
+    if (status) status.innerHTML = `❌ ${err.message}`;
+    else alert(err.message);
+  }
+};
+
 // ================= SOFTWARE MANAGEMENT =================
 
 // SYSTEM STATUS (future Mega Server hook)
