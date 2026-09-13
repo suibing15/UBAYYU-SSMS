@@ -566,6 +566,31 @@ hr { border: none; border-top: 1px solid var(--line); margin: 16px 0; }
           <button class="primary" type="submit">Add Subject</button>
         </form>
         <div id="subjectsList"></div>
+
+        <hr>
+        <div style="margin-top:12px;padding:12px;border:1px solid var(--line);border-radius:10px;">
+          <h4 style="color:var(--ink);margin-top:0;">🧹 Fresh Term Reset — Selected Class</h4>
+          <p style="font-size:.8rem;color:var(--muted);margin-top:2px;">
+            Applies to whichever class is chosen in the "Select Class" dropdown above. Type that
+            class's exact name below to enable these buttons.
+          </p>
+          <input id="freshTermConfirmText" type="text" placeholder="Type the selected class's name" style="max-width:280px;">
+          <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">
+            <button id="deleteAllQuestionsBtn" disabled style="background:#c07a1e;color:#fff;">
+              Delete All Questions
+            </button>
+            <button id="deleteAllSubjectsBtn" disabled style="background:#a8432f;color:#fff;">
+              Delete All Subjects (+ Results)
+            </button>
+          </div>
+          <p style="font-size:.75rem;color:var(--muted);margin-top:6px;">
+            "Delete All Questions" empties every subject's question bank but keeps the subjects
+            themselves. "Delete All Subjects" removes the subjects entirely and clears this
+            class's existing test/exam scores too — a genuinely clean slate for a new term.
+            Neither can be undone.
+          </p>
+          <div id="freshTermStatus" style="font-size:.85rem;margin-top:8px;"></div>
+        </div>
       </div>
     </div>
 

@@ -1439,6 +1439,129 @@ app.delete('/api/admin/question/:subjectId/:qid/:classId', (req, res) => {
   }
 });
 
+// ======================================================
+// DELETE ALL QUESTIONS FOR A CLASS (FRESH TERM RESET)
+// ======================================================
+// Empties every subject's question bank (test1/test2/test3/exam) for
+// one class — the subjects themselves, and everything else about
+// them (timings, teacher signature, etc.), are left untouched. Scoped
+// confirmation: the admin must type this exact class's own name, not
+// a generic phrase, so picking the wrong class from a list can't
+// silently wipe the wrong one's questions.
+//
+// Also deletes each question's uploaded image from Supabase Storage —
+// the existing single-question delete route never did this, leaving
+// orphaned images behind; this bulk version doesn't repeat that gap.
+app.delete("/api/admin/class/:classId/questions/all", async (req, res) => {
+  if (!req.session.admin) return res.status(401).json({ error: "Unauthorized" });
+
+  try {
+    const { classId } = req.params;
+    const { confirmation } = req.body;
+
+    const data = readData();
+    const cls = (data.classes || []).find((c) => c.id === classId);
+    if (!cls) return res.status(404).json({ error: "Class not found." });
+
+    if (confirmation !== cls.name) {
+      return res.status(400).json({ error: "Confirmation did not match the class name exactly." });
+    }
+
+    const subjectsInClass = (data.subjects || []).filter((s) => s.classId === classId);
+    let questionsDeleted = 0;
+    const imagesToDelete = [];
+
+    subjectsInClass.forEach((subj) => {
+      ["test1", "test2", "test3", "exam"].forEach((t) => {
+        (subj.questions?.[t] || []).forEach((q) => {
+          questionsDeleted++;
+          if (q.image) imagesToDelete.push(q.image);
+        });
+        if (subj.questions) subj.questions[t] = [];
+      });
+    });
+
+    await Promise.all(
+      imagesToDelete.map((url) => {
+        const storagePath = storagePathFromUrl(url);
+        return storagePath ? deleteFromStorage(storagePath) : Promise.resolve();
+      })
+    );
+
+    await writeData(data, ["subjects", "questions"]);
+
+    res.json({
+      success: true,
+      subjectsAffected: subjectsInClass.length,
+      questionsDeleted,
+      imagesDeleted: imagesToDelete.length,
+    });
+  } catch (err) {
+    console.error("Delete all questions for class error:", err);
+    res.status(500).json({ error: "Failed to delete all questions for this class." });
+  }
+});
+
+// ======================================================
+// DELETE ALL SUBJECTS FOR A CLASS (FRESH TERM RESET)
+// ======================================================
+// Removes every subject in a class entirely — along with their
+// questions (and question images in Storage), and this class's
+// existing test/exam results, so a class genuinely starts the new
+// term with nothing left pointing at subjects that no longer exist.
+// Same scoped confirmation as above: type this exact class's name.
+app.delete("/api/admin/class/:classId/subjects/all", async (req, res) => {
+  if (!req.session.admin) return res.status(401).json({ error: "Unauthorized" });
+
+  try {
+    const { classId } = req.params;
+    const { confirmation } = req.body;
+
+    const data = readData();
+    const cls = (data.classes || []).find((c) => c.id === classId);
+    if (!cls) return res.status(404).json({ error: "Class not found." });
+
+    if (confirmation !== cls.name) {
+      return res.status(400).json({ error: "Confirmation did not match the class name exactly." });
+    }
+
+    const subjectsInClass = (data.subjects || []).filter((s) => s.classId === classId);
+    const imagesToDelete = [];
+
+    subjectsInClass.forEach((subj) => {
+      ["test1", "test2", "test3", "exam"].forEach((t) => {
+        (subj.questions?.[t] || []).forEach((q) => {
+          if (q.image) imagesToDelete.push(q.image);
+        });
+      });
+    });
+
+    await Promise.all(
+      imagesToDelete.map((url) => {
+        const storagePath = storagePathFromUrl(url);
+        return storagePath ? deleteFromStorage(storagePath) : Promise.resolve();
+      })
+    );
+
+    const resultsBefore = (data.results || []).length;
+    data.subjects = (data.subjects || []).filter((s) => s.classId !== classId);
+    data.results = (data.results || []).filter((r) => r.classId !== classId);
+    const resultsDeleted = resultsBefore - data.results.length;
+
+    await writeData(data, ["subjects", "questions", "results"]);
+
+    res.json({
+      success: true,
+      subjectsDeleted: subjectsInClass.length,
+      resultsDeleted,
+      imagesDeleted: imagesToDelete.length,
+    });
+  } catch (err) {
+    console.error("Delete all subjects for class error:", err);
+    res.status(500).json({ error: "Failed to delete all subjects for this class." });
+  }
+});
+
 // ----------------------------- UPDATE TIMINGS -----------------------------
 app.post('/api/admin/subject/timings', (req, res) => {
   if (!req.session.admin) return res.status(401).json({ error: 'Unauthorized' });

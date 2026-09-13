@@ -1051,6 +1051,7 @@ window.loadClasses = async function () {
       const opt = document.createElement('option');
       opt.value = c.id;
       opt.textContent = `${c.name} (${c.id})`;
+      opt.dataset.name = c.name; // read back by the fresh-term-reset confirmation check
       sel.appendChild(opt);
     });
   });
@@ -1151,6 +1152,84 @@ window.resetCbtCredentials = async function () {
     else alert(err.message);
   }
 };
+
+// ---- Fresh term reset (delete all questions / all subjects for the
+// currently selected class) — both buttons stay disabled until the
+// typed text exactly matches that class's real name, read back from
+// the dataset.name attribute loadClasses() attaches to each option.
+(function setupFreshTermReset() {
+  const confirmInput = document.getElementById("freshTermConfirmText");
+  const questionsBtn = document.getElementById("deleteAllQuestionsBtn");
+  const subjectsBtn = document.getElementById("deleteAllSubjectsBtn");
+  const status = document.getElementById("freshTermStatus");
+  if (!confirmInput || !questionsBtn || !subjectsBtn) return;
+
+  function selectedClassName() {
+    const sel = document.getElementById("classSelector");
+    const opt = sel && sel.selectedOptions[0];
+    return opt ? opt.dataset.name || "" : "";
+  }
+
+  function refreshButtonState() {
+    const matches = confirmInput.value.length > 0 && confirmInput.value === selectedClassName();
+    questionsBtn.disabled = !matches;
+    subjectsBtn.disabled = !matches;
+  }
+
+  confirmInput.addEventListener("input", refreshButtonState);
+  document.getElementById("classSelector")?.addEventListener("change", () => {
+    confirmInput.value = "";
+    refreshButtonState();
+  });
+
+  async function runReset(endpoint, btn, successMessage) {
+    const sel = document.getElementById("classSelector");
+    const classId = sel?.value;
+    const className = selectedClassName();
+    if (!classId || confirmInput.value !== className) return;
+
+    btn.disabled = true;
+    if (status) { status.style.color = "#555"; status.textContent = "⏳ Working…"; }
+
+    try {
+      const res = await fetch(`/api/admin/class/${encodeURIComponent(classId)}${endpoint}`, {
+        method: "DELETE",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirmation: confirmInput.value })
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j.error || "Request failed");
+
+      if (status) { status.style.color = "green"; status.textContent = `✅ ${successMessage(j)}`; }
+      confirmInput.value = "";
+      refreshButtonState();
+      window.loadSubjects?.(classId);
+    } catch (err) {
+      if (status) { status.style.color = "red"; status.textContent = `❌ ${err.message}`; }
+      refreshButtonState();
+    }
+  }
+
+  questionsBtn.addEventListener("click", () =>
+    runReset(
+      "/questions/all",
+      questionsBtn,
+      (j) => `Cleared ${j.questionsDeleted} question(s) across ${j.subjectsAffected} subject(s).`
+    )
+  );
+
+  subjectsBtn.addEventListener("click", () => {
+    if (!confirm(
+      "This also clears this class's existing test/exam scores, not just its subjects. Continue?"
+    )) return;
+    runReset(
+      "/subjects/all",
+      subjectsBtn,
+      (j) => `Deleted ${j.subjectsDeleted} subject(s) and ${j.resultsDeleted} result(s).`
+    );
+  });
+})();
 
 // ================= SOFTWARE MANAGEMENT =================
 
