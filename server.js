@@ -973,7 +973,7 @@ app.post('/api/admin/upload', brandingUpload, async (req, res) => {
     // Uploaded to Supabase Storage now, not local disk — this is what
     // actually survives a redeploy or a restart on a host with no
     // persistent disk, which local disk never did.
-    const publicUrl = await uploadBuffer(`branding/${type}${ext}`, req.file.buffer, req.file.mimetype);
+    const publicUrl = await uploadBuffer(`branding/${type}${ext}`, req.file.buffer, req.file.mimetype, "300");
 
     const data = readData();
     data.meta ||= {};
@@ -1142,7 +1142,7 @@ app.post("/api/admin/question", (req, res) => {
         const safeQid = String(qid).replace(/[^a-zA-Z0-9_-]/g, '_');
         // Uploaded to Supabase Storage — survives a redeploy or
         // restart, which local disk never did.
-        imageUrl = await uploadBuffer(`questions/${safeQid}${ext}`, req.file.buffer, req.file.mimetype);
+        imageUrl = await uploadBuffer(`questions/${safeQid}${ext}`, req.file.buffer, req.file.mimetype, "300");
       }
 
       subj.questions[type].push({
@@ -1334,7 +1334,7 @@ app.post('/api/admin/questions/bulk-upload', csvUpload, async (req, res) => {
           const safeQid = String(r.qid || `Q${Date.now()}`).replace(/[^a-zA-Z0-9_-]/g, '_');
           // Uploaded to Supabase Storage — survives a redeploy or
           // restart, which local disk never did.
-          imagePath = await uploadBuffer(`questions/${safeQid}${ext}`, match.buffer, match.mimetype);
+          imagePath = await uploadBuffer(`questions/${safeQid}${ext}`, match.buffer, match.mimetype, "300");
           unmatchedImageNames.delete(wantedName);
           imagesAttached++;
         }
@@ -1712,7 +1712,7 @@ app.post("/api/admin/student", studentUpload, async (req, res) => {
     let photoPath = null;
     if (req.file) {
       const ext = path.extname(req.file.originalname) || ".jpg";
-      photoPath = await uploadBuffer(`students/${id}${ext}`, req.file.buffer, req.file.mimetype);
+      photoPath = await uploadBuffer(`students/${id}${ext}`, req.file.buffer, req.file.mimetype, "300");
     }
 
     const plainPassword = password || id; // shown once, in this response only
@@ -1811,7 +1811,7 @@ app.post("/api/admin/students/bulk-upload", studentBulkUpload, async (req, res) 
         if (match) {
           const ext = path.extname(match.originalname) || ".jpg";
           const safeId = id.replace(/[^a-zA-Z0-9_-]/g, "_");
-          photoPath = await uploadBuffer(`students/${safeId}${ext}`, match.buffer, match.mimetype);
+          photoPath = await uploadBuffer(`students/${safeId}${ext}`, match.buffer, match.mimetype, "300");
           unmatchedPhotoNames.delete(wantedName);
           imagesAttached++;
         }
@@ -1880,7 +1880,7 @@ app.put("/api/admin/student/:id", studentUpload, async (req, res) => {
 
     if (req.file) {
       const ext = path.extname(req.file.originalname) || ".jpg";
-      st.photo = await uploadBuffer(`students/${st.id}${ext}`, req.file.buffer, req.file.mimetype);
+      st.photo = await uploadBuffer(`students/${st.id}${ext}`, req.file.buffer, req.file.mimetype, "300");
     }
 
     writeData(data, ['students'])
@@ -2052,7 +2052,7 @@ app.post("/api/admin/teacher", teacherUpload, async (req, res) => {
     let photoPath = null;
     if (req.file) {
       const ext = path.extname(req.file.originalname) || ".jpg";
-      photoPath = await uploadBuffer(`teachers/${id}${ext}`, req.file.buffer, req.file.mimetype);
+      photoPath = await uploadBuffer(`teachers/${id}${ext}`, req.file.buffer, req.file.mimetype, "300");
     }
 
     const hashedPassword = await bcrypt.hash(String(password), 10);
@@ -4241,7 +4241,7 @@ app.post("/api/upload/teacher-signature/:classId", upload.single("signature"), a
 
     // Uploaded to Supabase Storage — survives a redeploy or restart,
     // which local disk never did.
-    const rel = await uploadBuffer(`signatures/${classId}_signature.png`, req.file.buffer, req.file.mimetype);
+    const rel = await uploadBuffer(`signatures/${classId}_signature.png`, req.file.buffer, req.file.mimetype, "300");
 
     const data = readData();
     if (!data.classes) data.classes = [];
@@ -4273,7 +4273,7 @@ app.post("/api/upload/principal-signature", upload.single("signature"), async (r
 
     // Uploaded to Supabase Storage — survives a redeploy or restart,
     // which local disk never did.
-    const publicUrl = await uploadBuffer("branding/principal_signature.png", req.file.buffer, req.file.mimetype);
+    const publicUrl = await uploadBuffer("branding/principal_signature.png", req.file.buffer, req.file.mimetype, "300");
 
     await updateData((data) => {
       data.meta = data.meta || {};
