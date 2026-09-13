@@ -379,10 +379,98 @@ function requireAdmin(req, res, next) {
    APP INIT
 ====================================================== */
 const app = express();
+
+// CORS allowlist — reads from ALLOWED_ORIGINS (comma-separated) in
+// Render's environment variables, so adding or changing the frontend's
+// domain (a new Vercel deployment, a custom domain, etc.) never needs
+// a code change or redeploy of this file — just update the env var.
+// Previously this allowed literally any origin (cb(null, true)
+// unconditionally), which meant any website, including a malicious
+// one, could make authenticated requests using a logged-in admin's
+// own session cookie if they were tricked into visiting it while
+// still logged in here.
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || "")
+  .split(",")
+  .map((o) => o.trim())
+  .filter(Boolean);
+
 app.use(cors({
-  origin: (origin, cb) => cb(null, true),
+  origin: (origin, cb) => {
+    // No Origin header at all means this wasn't a cross-origin request
+    // in the first place — a browser loading this server's own static
+    // admin.html/exam.html pages directly, or a server-to-server call.
+    // Always allowed, since CORS was never relevant to it.
+    if (!origin) return cb(null, true);
+    if (allowedOrigins.includes(origin)) return cb(null, true);
+    return cb(new Error(`Origin ${origin} is not allowed by CORS.`));
+  },
   credentials: true
 }));
+
+// ------------------------------------------------------------------
+// Rate limiting for every login/verification endpoint — no new
+// dependency; a plain in-memory sliding window, which works reliably
+// here specifically because this app runs as one persistent process
+// (same reasoning the in-memory data cache already relies on), not a
+// serverless function that could reset this state between requests.
+//
+// Keyed per IP + route, so one person mistyping their own password a
+// few times never affects anyone else's ability to log in.
+// ------------------------------------------------------------------
+function createRateLimiter({ windowMs, max, message }) {
+  const hits = new Map(); // "ip:path" -> { count, resetAt }
+
+  // Periodic cleanup so this Map never grows unbounded over the life
+  // of the process — expired entries are simply dropped.
+  setInterval(() => {
+    const now = Date.now();
+    for (const [key, entry] of hits) {
+      if (entry.resetAt <= now) hits.delete(key);
+    }
+  }, windowMs).unref();
+
+  return function rateLimit(req, res, next) {
+    const key = `${req.ip}:${req.path}`;
+    const now = Date.now();
+    let entry = hits.get(key);
+
+    if (!entry || entry.resetAt <= now) {
+      entry = { count: 0, resetAt: now + windowMs };
+      hits.set(key, entry);
+    }
+
+    entry.count++;
+
+    if (entry.count > max) {
+      res.setHeader("Retry-After", String(Math.ceil((entry.resetAt - now) / 1000)));
+      return res.status(429).json({
+        error: message || "Too many attempts. Please wait a few minutes and try again.",
+      });
+    }
+
+    next();
+  };
+}
+
+// General login/portal-password endpoints — generous enough that a
+// real person mistyping a password a few times is never blocked, but
+// strict enough to make automated password-guessing impractical.
+const loginRateLimit = createRateLimiter({
+  windowMs: 5 * 60 * 1000,
+  max: 10,
+  message: "Too many login attempts. Please wait a few minutes and try again.",
+});
+
+// Tighter limit specifically for the CBT student login. A 4-digit
+// password is only 10,000 possible combinations — the general limit
+// above isn't tight enough here, since 10 attempts every 5 minutes
+// would still let all 10,000 be tried in well under a day. This makes
+// brute-forcing genuinely impractical rather than merely slow.
+const cbtVerifyRateLimit = createRateLimiter({
+  windowMs: 5 * 60 * 1000,
+  max: 5,
+  message: "Too many attempts. Please wait a few minutes and try again.",
+});
 
 // Render (and most hosting platforms) sit behind a reverse proxy that
 // terminates HTTPS and forwards plain HTTP internally — without this,
@@ -390,6 +478,8 @@ app.use(cors({
 // secure, and would refuse to set the "secure: true" session cookie
 // configured below, silently breaking cross-origin login in
 // production even though the site is genuinely running on HTTPS.
+// It's also what makes req.ip (used by the rate limiter above) reflect
+// the real client IP instead of the proxy's own address.
 app.set("trust proxy", 1);
 
 app.use(helmet({
@@ -466,7 +556,7 @@ setInterval(() => {
   }
 }, 60_000); // every 60 seconds
 // -------------------- TEACHER LOGIN (ATTENDANCE) --------------------
-app.post('/api/attendance/teacher/login', async (req, res) => {
+app.post('/api/attendance/teacher/login', loginRateLimit, async (req, res) => {
   const { teacherId, password } = req.body;
 
   if (!teacherId || !password) {
@@ -787,7 +877,7 @@ app.get('/manage/admin-ui.js', requireAdmin, (req, res) => {
   res.sendFile(path.join(__dirname, 'management', 'admin-ui.js'));
 });
 // ===== ADMIN UNLOCK =====
-app.post('/api/manage-unlock', (req, res) => {
+app.post('/api/manage-unlock', loginRateLimit, (req, res) => {
   const { key } = req.body;
 
   if (key === 'UBAYYU') {
@@ -852,7 +942,7 @@ app.post("/offline-sync", async (req, res) => {
 });
 
 // ---------------- ADMIN ----------------
-app.post('/api/admin/login', async (req, res) => {
+app.post('/api/admin/login', loginRateLimit, async (req, res) => {
   const { username, password } = req.body;
   const data = ReadData();
   const admin = (data.admins || []).find(a => a.username === username);
@@ -2260,7 +2350,7 @@ app.get("/api/admin/attendance/teachers", (req, res) => {
 });
 
 // ---------------- PORTAL AUTH ----------------
-app.post('/api/portal/teacher/auth', (req, res) => {
+app.post('/api/portal/teacher/auth', loginRateLimit, (req, res) => {
   const { portalPassword } = req.body;
   const data = readData();
   if (data.meta?.portalToggles?.teacherPortal === false) {
@@ -2272,7 +2362,7 @@ app.post('/api/portal/teacher/auth', (req, res) => {
   } else res.status(401).json({ error: 'Invalid password' });
 });
 
-app.post('/api/portal/exam/auth', (req, res) => {
+app.post('/api/portal/exam/auth', loginRateLimit, (req, res) => {
   const { portalPassword } = req.body;
   const data = readData();
   if (data.meta?.portalToggles?.examPortal === false) {
@@ -2284,7 +2374,7 @@ app.post('/api/portal/exam/auth', (req, res) => {
   } else res.status(401).json({ error: 'Invalid password' });
 });
 
-app.post('/api/portal/report/auth', (req, res) => {
+app.post('/api/portal/report/auth', loginRateLimit, (req, res) => {
   const { portalPassword } = req.body;
   const data = readData();
   if (data.meta?.portalToggles?.reportPortal === false) {
@@ -2316,7 +2406,7 @@ function normalize(str) {
 }
 
 // ✅ Teacher class auth using session only
-app.post('/api/teacher/class/auth', (req, res) => {
+app.post('/api/teacher/class/auth', loginRateLimit, (req, res) => {
   if (!req.session.portalTeacher)
     return res.status(401).json({ error: 'Teacher login required' });
 
@@ -2355,7 +2445,7 @@ app.get('/api/class/:classId/students', (req, res) => {
 // is a bcrypt hash — comparing it with plain "===" in the browser (which is
 // what the old client-side code did) can never work against a hash, and
 // sending the hash itself to the browser at all isn't good practice either.
-app.post('/api/exam/student/verify', async (req, res) => {
+app.post('/api/exam/student/verify', cbtVerifyRateLimit, async (req, res) => {
   try {
     const { studentId, password } = req.body;
     if (!studentId || !password) {
@@ -2937,7 +3027,7 @@ app.post("/api/system/lock", (req, res) => {
 
 // Unlock system — an already-logged-in admin can always unlock directly;
 // anyone else needs the unlock password, if one has been set.
-app.post("/api/system/unlock", async (req, res) => {
+app.post("/api/system/unlock", loginRateLimit, async (req, res) => {
   if (!(req.session && req.session.admin)) {
     const data = readData();
     const hash = data.meta?.unlockPasswordHash;
@@ -4765,7 +4855,7 @@ app.post('/api/exam/submit', preventMultipleSubmissions, async (req, res) => {
 });
 
 // ---------------- PARENT PORTAL AUTH ----------------
-app.post('/api/portal/parent/auth', (req, res) => {
+app.post('/api/portal/parent/auth', loginRateLimit, (req, res) => {
   try {
     const { portalPassword } = req.body;
     const data = readData();
@@ -4790,7 +4880,7 @@ app.post('/api/portal/parent/auth', (req, res) => {
 
 
 // ---------------- VERIFY STUDENT ID (NEW) ----------------
-app.post('/api/verify-student-id', (req, res) => {
+app.post('/api/verify-student-id', loginRateLimit, (req, res) => {
   try {
     // Require parent portal session
     if (!req.session.parentAuth) {
