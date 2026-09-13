@@ -457,7 +457,7 @@ function createRateLimiter({ windowMs, max, message }) {
 // strict enough to make automated password-guessing impractical.
 const loginRateLimit = createRateLimiter({
   windowMs: 5 * 60 * 1000,
-  max: 10,
+  max: 4,
   message: "Too many login attempts. Please wait a few minutes and try again.",
 });
 
