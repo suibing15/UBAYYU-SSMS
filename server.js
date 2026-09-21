@@ -452,23 +452,31 @@ function createRateLimiter({ windowMs, max, message }) {
   };
 }
 
-// General login/portal-password endpoints — generous enough that a
-// real person mistyping a password a few times is never blocked, but
-// strict enough to make automated password-guessing impractical.
+// General login/portal-password endpoints — keyed by IP, which means a
+// school's shared WiFi (many people behind one public IP) all draw from
+// the same bucket. max: 4 (set directly on GitHub after this was first
+// built) was tight enough that a handful of legitimate logins in the
+// same few minutes could lock out everyone else on that connection —
+// not an attack, just normal shared-network use. 20 still makes
+// automated password-guessing impractical while giving real concurrent
+// use enough headroom.
 const loginRateLimit = createRateLimiter({
   windowMs: 5 * 60 * 1000,
-  max: 10,
+  max: 20,
   message: "Too many login attempts. Please wait a few minutes and try again.",
 });
 
-// Tighter limit specifically for the CBT student login. A 4-digit
-// password is only 10,000 possible combinations — the general limit
-// above isn't tight enough here, since 10 attempts every 5 minutes
-// would still let all 10,000 be tried in well under a day. This makes
-// brute-forcing genuinely impractical rather than merely slow.
+// Tighter limit specifically for the CBT student login, since a 4-digit
+// password is only 10,000 possible combinations — but a CBT room is
+// exactly the shared-IP-many-legitimate-logins-at-once scenario, likely
+// more than any other login on this system (a whole class starting an
+// exam within the same few minutes on the same school connection). 12
+// still means fully exhausting 10,000 combinations against one student
+// would take upward of 60 hours of continuous automated guessing —
+// impractical — while comfortably covering a real exam-room rush.
 const cbtVerifyRateLimit = createRateLimiter({
   windowMs: 5 * 60 * 1000,
-  max: 5,
+  max: 12,
   message: "Too many attempts. Please wait a few minutes and try again.",
 });
 
@@ -1312,7 +1320,7 @@ app.post("/api/admin/questions/forward", (req, res) => {
   if (!req.session.admin)
     return res.status(401).json({ error: "Unauthorized" });
 
-  const { fromClass, toClass, subjectId } = req.body;
+  const { fromClass, toClass, subjectId, confirmOverwrite } = req.body;
 
   try {
     const data = readData();
@@ -1327,24 +1335,55 @@ app.post("/api/admin/questions/forward", (req, res) => {
       s => s.id === subjectId && s.classId === toClass
     );
 
-   if (!target) {
-  target = {
-    id: subjectId,
-    name: source.name,
-    classId: toClass,
-    questions: { test1: [], test2: [], test3: [], exam: [] },
+    // Real, confirmed bug: subject IDs are admin-chosen free text (the
+    // add-subject form's own placeholder literally suggests "MATH"),
+    // so the same short ID is commonly and correctly reused for the
+    // "same" subject across many different classes, each scoped by its
+    // own classId. This code used to match the target purely by that
+    // shared ID and then unconditionally overwrite target.questions
+    // with the source's — meaning forwarding into a class that already
+    // had its own real, populated version of that subject silently
+    // destroyed it with zero warning, zero confirmation, and zero way
+    // to undo it. That's exactly what happened to real exam data.
+    //
+    // Now: if the target already exists AND already has at least one
+    // question in any type, this refuses to proceed unless the caller
+    // explicitly passes confirmOverwrite: true — and hands back exactly
+    // how many questions of each type are about to be destroyed, so the
+    // frontend can show a warning with real numbers instead of a vague
+    // generic one that trains people to click through it.
+    if (target) {
+      const existingCounts = {
+        test1: (target.questions?.test1 || []).length,
+        test2: (target.questions?.test2 || []).length,
+        test3: (target.questions?.test3 || []).length,
+        exam: (target.questions?.exam || []).length,
+      };
+      const totalExisting = existingCounts.test1 + existingCounts.test2 + existingCounts.test3 + existingCounts.exam;
 
-    // ✅ FIX: preserve timing
-    timeLimits: source.timeLimits || {
-      test1: 30,
-      test2: 30,
-      test3: 30,
-      exam: 60
+      if (totalExisting > 0 && !confirmOverwrite) {
+        return res.status(409).json({
+          error: `${target.name} in the target class already has ${totalExisting} question(s). Forwarding would replace all of them.`,
+          requiresConfirmation: true,
+          existingCounts,
+          totalExisting,
+        });
+      }
+    } else {
+      target = {
+        id: subjectId,
+        name: source.name,
+        classId: toClass,
+        questions: { test1: [], test2: [], test3: [], exam: [] },
+        timeLimits: source.timeLimits || {
+          test1: 30,
+          test2: 30,
+          test3: 30,
+          exam: 60
+        }
+      };
+      data.subjects.push(target);
     }
-  };
-  data.subjects.push(target);
-}
-
 
     ["test1", "test2", "test3", "exam"].forEach(t => {
       target.questions[t] = JSON.parse(
