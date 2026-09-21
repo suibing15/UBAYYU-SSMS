@@ -546,19 +546,54 @@ window.loadSubjects = async function (classId = null) {
       const toClass = prompt("Enter target class ID");
       if (!toClass) return;
 
-      await fetch("/api/admin/questions/forward", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({
-          fromClass: subj.classId,
-          toClass,
-          subjectId: subj.id
-        })
-      });
+      // Previously this never checked the response at all — it always
+      // showed "Questions forwarded" regardless of whether the request
+      // actually succeeded, and (before the backend fix below existed)
+      // silently overwrote a target class's existing questions with no
+      // warning whatsoever if that class already had its own version of
+      // this subject. Now: a real confirmation with exact numbers when
+      // something would actually be lost, and no misleading success
+      // message when the backend genuinely refuses.
+      async function doForward(confirmOverwrite) {
+        const res = await fetch("/api/admin/questions/forward", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            fromClass: subj.classId,
+            toClass,
+            subjectId: subj.id,
+            confirmOverwrite: !!confirmOverwrite
+          })
+        });
+        const j = await res.json().catch(() => ({}));
 
-      alert("Questions forwarded");
-      window.loadSubjects(classId);
+        if (res.status === 409 && j.requiresConfirmation) {
+          const breakdown = j.existingCounts
+            ? Object.entries(j.existingCounts)
+                .filter(([, n]) => n > 0)
+                .map(([type, n]) => `${n} ${type}`)
+                .join(", ")
+            : "";
+          const proceed = confirm(
+            `The target class already has ${j.totalExisting} question(s) in this subject` +
+            (breakdown ? ` (${breakdown})` : "") +
+            `. Forwarding will REPLACE ALL of them. This cannot be undone. Continue?`
+          );
+          if (!proceed) return;
+          return doForward(true);
+        }
+
+        if (!res.ok) {
+          alert(j.error || "Failed to forward questions.");
+          return;
+        }
+
+        alert("Questions forwarded successfully.");
+        window.loadSubjects(classId);
+      }
+
+      doForward(false);
     };
 
     wrapper.appendChild(pdfBtn);
