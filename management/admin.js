@@ -733,8 +733,84 @@ function renderStudentList() {
       delBtn.textContent = "Delete";
       delBtn.addEventListener("click", () => deleteStudent(st.id));
 
+      const editBtn = document.createElement('button');
+      editBtn.textContent = "Edit";
+      editBtn.style.marginLeft = "6px";
+
+      const editForm = document.createElement('div');
+      editForm.style.display = 'none';
+      editForm.style.marginTop = '8px';
+      editForm.style.padding = '10px';
+      editForm.style.border = '1px solid var(--line)';
+      editForm.style.borderRadius = '8px';
+
+      const allClasses = window.allStudentsCache.map(x => x.cls);
+      const classOptionsHtml = allClasses
+        .map(c => `<option value="${c.id}" ${c.id === st.classId ? 'selected' : ''}>${c.name}</option>`)
+        .join('');
+
+      editForm.innerHTML = `
+        <div style="display:flex;flex-direction:column;gap:8px;max-width:320px;">
+          <label>Student ID<br><input type="text" class="edit-newid" value="${st.id}"></label>
+          <label>Full name<br><input type="text" class="edit-name" value="${st.name || ''}"></label>
+          <label>Class<br><select class="edit-classid">${classOptionsHtml}</select></label>
+          <label>New password (leave blank to keep unchanged)<br><input type="text" class="edit-password"></label>
+          <label>Replace photo (optional)<br><input type="file" class="edit-photo" accept="image/*"></label>
+          <div style="display:flex;gap:8px;">
+            <button type="button" class="edit-save">Save changes</button>
+            <button type="button" class="edit-cancel">Cancel</button>
+          </div>
+          <div class="edit-status" style="font-size:13px;"></div>
+        </div>
+      `;
+
+      editBtn.addEventListener("click", () => {
+        editForm.style.display = editForm.style.display === 'none' ? 'block' : 'none';
+      });
+
+      editForm.querySelector('.edit-cancel').addEventListener('click', () => {
+        editForm.style.display = 'none';
+      });
+
+      editForm.querySelector('.edit-save').addEventListener('click', async () => {
+        const status = editForm.querySelector('.edit-status');
+        const newId = editForm.querySelector('.edit-newid').value.trim();
+        const name = editForm.querySelector('.edit-name').value.trim();
+        const classId = editForm.querySelector('.edit-classid').value;
+        const password = editForm.querySelector('.edit-password').value;
+        const photoFile = editForm.querySelector('.edit-photo').files[0];
+
+        const fd = new FormData();
+        fd.append('newId', newId);
+        fd.append('name', name);
+        fd.append('classId', classId);
+        if (password) fd.append('password', password);
+        if (photoFile) fd.append('photo', photoFile);
+
+        status.textContent = '⏳ Saving…';
+        try {
+          const res = await fetch(`/api/admin/student/${encodeURIComponent(st.id)}`, {
+            method: 'PUT',
+            credentials: 'include',
+            body: fd
+          });
+          const j = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(j.error || 'Failed to update student.');
+
+          status.textContent = '✅ Saved';
+          if (j.generatedPassword) {
+            alert(`New password for ${j.id}: ${j.generatedPassword}\nWrite this down now, it won't be shown again.`);
+          }
+          window.loadStudents();
+        } catch (err) {
+          status.textContent = `❌ ${err.message}`;
+        }
+      });
+
       row.appendChild(idBtn);
+      row.appendChild(editBtn);
       row.appendChild(delBtn);
+      row.appendChild(editForm);
       block.appendChild(row);
     });
     sDiv.appendChild(block);
@@ -1101,13 +1177,31 @@ window.bulkPromoteStudents = async function () {
   const toClass = prompt("Enter TARGET class ID");
   if (!toClass) return;
 
-  if (!confirm(`Promote ALL students from ${fromClass} to ${toClass}?`)) return;
+  // Same ALL-or-comma-separated-IDs convention already used for CBT
+  // credentials above — type ALL to promote the whole class (the
+  // original, only behavior this used to have), or list specific
+  // student IDs to promote just them.
+  const idsRaw = prompt(
+    "Promote which students? Type ALL for the whole class, or list specific student IDs separated by commas."
+  );
+  if (!idsRaw) return;
+
+  const trimmed = idsRaw.trim();
+  const studentIds = trimmed.toUpperCase() === "ALL"
+    ? undefined
+    : trimmed.split(",").map(s => s.trim()).filter(Boolean);
+
+  if (!confirm(
+    studentIds
+      ? `Promote ${studentIds.length} student(s) from ${fromClass} to ${toClass}?`
+      : `Promote ALL students from ${fromClass} to ${toClass}?`
+  )) return;
 
   const res = await fetch("/api/admin/students/promote", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
-    body: JSON.stringify({ fromClass, toClass })
+    body: JSON.stringify({ fromClass, toClass, studentIds })
   });
 
   const j = await res.json();

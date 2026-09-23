@@ -1989,10 +1989,48 @@ app.put("/api/admin/student/:id", studentUpload, async (req, res) => {
 
   try {
     const studentId = req.params.id;
-    const { name, classId, password } = req.body;
+    const { name, classId, password, newId } = req.body;
     const data = readData();
     const st = (data.students || []).find(s => s.id === studentId);
     if (!st) return res.status(404).json({ error: "Student not found" });
+
+    // Changing a student's own ID is genuinely risky — their ID is used
+    // as a foreign key in results (studentId), pdfs (studentId), and
+    // attendance (each date's record keys students BY id, e.g.
+    // students[studentId] = "present"). Renaming st.id alone without
+    // updating all three would silently orphan that student's entire
+    // score history, their generated report/receipt PDFs, and every
+    // day they were ever marked present — they'd all keep pointing at
+    // an ID that no longer belongs to anyone. This updates all four
+    // together, in the same request, so nothing is left dangling.
+    let saveGroups = ['students'];
+    if (typeof newId !== "undefined" && newId.trim() && newId.trim() !== studentId) {
+      const trimmedNewId = newId.trim();
+      const collision = (data.students || []).find(s => s.id === trimmedNewId);
+      if (collision) {
+        return res.status(400).json({ error: "That student ID is already in use by someone else." });
+      }
+
+      const oldId = st.id;
+      st.id = trimmedNewId;
+
+      (data.results || []).forEach(r => {
+        if (r.studentId === oldId) r.studentId = trimmedNewId;
+      });
+      (data.pdfs || []).forEach(p => {
+        if (p.studentId === oldId) p.studentId = trimmedNewId;
+      });
+      Object.values(data.attendance || {}).forEach(byDate => {
+        Object.values(byDate || {}).forEach(record => {
+          if (record.students && Object.prototype.hasOwnProperty.call(record.students, oldId)) {
+            record.students[trimmedNewId] = record.students[oldId];
+            delete record.students[oldId];
+          }
+        });
+      });
+
+      saveGroups = ['students', 'results', 'pdfs', 'attendance'];
+    }
 
     if (typeof name !== "undefined") st.name = name;
     if (typeof classId !== "undefined") {
@@ -2009,14 +2047,18 @@ app.put("/api/admin/student/:id", studentUpload, async (req, res) => {
 
     if (req.file) {
       const ext = path.extname(req.file.originalname) || ".jpg";
+      // Uses the student's current (possibly just-renamed) id, so a
+      // photo uploaded in the same request as an ID change lands under
+      // the new id from the start.
       st.photo = await uploadBuffer(`students/${st.id}${ext}`, req.file.buffer, req.file.mimetype, "300");
     }
 
-    writeData(data, ['students'])
+    writeData(data, saveGroups)
       .then(() =>
         res.json({
           success: true,
           message: "Student updated successfully",
+          id: st.id, // the caller needs this back if the ID just changed
           generatedPassword // undefined if the password wasn't changed this time
         })
       )
@@ -2108,7 +2150,7 @@ app.post("/api/admin/students/promote", (req, res) => {
   if (!req.session.admin)
     return res.status(401).json({ error: "Unauthorized" });
 
-  const { fromClass, toClass } = req.body;
+  const { fromClass, toClass, studentIds } = req.body;
 
   if (!fromClass || !toClass)
     return res.status(400).json({ error: "Missing fromClass or toClass" });
@@ -2121,12 +2163,20 @@ app.post("/api/admin/students/promote", (req, res) => {
     if (!targetClass)
       return res.status(404).json({ error: "Target class does not exist" });
 
-    const students = (data.students || []).filter(
+    // studentIds is optional — when provided (an array), only those
+    // specific students are promoted; the previous behavior (promote
+    // every student in the class) still works exactly as before when
+    // it's omitted, so nothing that already calls this route breaks.
+    const allInClass = (data.students || []).filter(
       s => s.classId === fromClass
     );
 
+    const students = Array.isArray(studentIds) && studentIds.length
+      ? allInClass.filter(s => studentIds.includes(s.id))
+      : allInClass;
+
     if (!students.length)
-      return res.status(404).json({ error: "No students in source class" });
+      return res.status(404).json({ error: "No matching students found in source class" });
 
     // Promote students
     students.forEach(st => {
@@ -2144,7 +2194,7 @@ app.post("/api/admin/students/promote", (req, res) => {
       p => !promotedIds.includes(p.studentId)
     );
 
-    writeData(data, ['students'])
+    writeData(data, ['students', 'results', 'pdfs'])
       .then(() =>
         res.json({
           success: true,
