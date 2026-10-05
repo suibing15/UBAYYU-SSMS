@@ -29,6 +29,29 @@ function getRecommendation(avg) {
   return "Needs serious improvement and closer attention.";
 }
 
+
+// The grading bands below (A = 70+, B = 60+, ...) are percentages. A
+// subject's total used to be assumed to be out of 100, which only holds
+// for the default 10/10/10/70 scale. Now that each school can set its own
+// maximum per assessment, a total is first converted to a percentage of
+// the school's real maximum (the sum of its configured assessment caps)
+// before grading — so 45/50 grades as 90%, not as 45%. With the default
+// scale the maximum is 100 and this changes nothing.
+function maxTotalOf(meta) {
+  const c = (meta && meta.scoreCaps) || { test1: 10, test2: 10, test3: 10, exam: 70 };
+  const sum = ["test1", "test2", "test3", "exam"].reduce((a, k) => a + (Number(c[k]) > 0 ? Number(c[k]) : 0), 0);
+  return sum > 0 ? sum : 100;
+}
+function asPercent(value, meta) {
+  return (Number(value) / maxTotalOf(meta)) * 100;
+}
+// "Average: 41.20" normally; "Average: 41.20 (68.7%)" when the school's
+// maximum isn't 100, so the raw average is never misread as a percentage.
+function averageLabel(avg, meta) {
+  const max = maxTotalOf(meta);
+  return max === 100 ? `Average: ${avg}` : `Average: ${avg} (${asPercent(avg, meta).toFixed(1)}%)`;
+}
+
 // ======================================================================
 //   OPTIMIZED TRIPLE-LAYER EMBOSSED WATERMARK (FAST VERSION)
 // ======================================================================
@@ -238,7 +261,7 @@ function generateReportPDF(meta, student, reportData, outPath, callback) {
       const ex = +r.exam  || 0;
       const total = t1 + t2 + t3 + ex;
 
-      const { grade, remark } = getGradeAndRemark(total);
+      const { grade, remark } = getGradeAndRemark(asPercent(total, meta));
 
       totalScore += total;
       subjectCount++;
@@ -275,9 +298,9 @@ function generateReportPDF(meta, student, reportData, outPath, callback) {
     doc.font("Helvetica-Bold").fontSize(10);
     doc.text(`Subjects: ${subjectCount}`,60,y);
     doc.text(`Total: ${totalScore}`,200,y);
-    doc.text(`Average: ${avg}`,360,y);
+    doc.text(averageLabel(avg, meta),360,y);
 
-    const recommendation = getRecommendation(avg);
+    const recommendation = getRecommendation(asPercent(avg, meta));
 
     y += 28;
     doc.text("Teacher's Recommendation:",60,y);

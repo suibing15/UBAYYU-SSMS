@@ -167,13 +167,18 @@ function splitCSVLine(line, delimiter) {
 // which reflects the school's actual grading scale.
 const REASONABLE_MAX_SCORE = 1000;
 
-// The school's real grading scale — each Continuous Assessment test
-// is out of 10, the exam is out of 70 (10+10+10+70 = 100). Enforced
-// here so a mistyped score (a teacher typing "100" instead of "10",
-// or any other slip) is rejected server-side, in both systems,
-// rather than silently accepted and only caught later by a human
-// reading the report sheet.
-const SCORE_CAPS = { test1: 10, test2: 10, test3: 10, exam: 70 };
+// The school's grading scale — the maximum mark for each assessment.
+// Configurable per school from the admin panel (default 10/10/10/70,
+// the original fixed scale), stored in settings and read live on every
+// use, so a change takes effect immediately with no restart. A cap of
+// 0 means that assessment isn't used by this school. Enforced here so
+// a mistyped score (a teacher typing "100" instead of "10", or any
+// other slip) is rejected server-side, in both systems, rather than
+// silently accepted and only caught later by a human reading the
+// report sheet.
+function getScoreCaps() {
+  return normalizeScoreCaps(readData().meta?.scoreCaps);
+}
 
 // Validates one incoming score value against its field's real cap
 // before it's ever accepted — a garbage, mistyped, or out-of-range
@@ -184,7 +189,7 @@ const SCORE_CAPS = { test1: 10, test2: 10, test3: 10, exam: 70 };
 function sanitizeIncomingScore(field, raw, fallback) {
   if (raw === undefined || raw === "") return fallback;
   const num = Number(raw);
-  const cap = SCORE_CAPS[field] ?? REASONABLE_MAX_SCORE;
+  const cap = getScoreCaps()[field] ?? REASONABLE_MAX_SCORE;
   if (Number.isNaN(num) || num < 0 || num > cap) return fallback;
   return num;
 }
@@ -346,7 +351,7 @@ const brandingUpload = multer({
 ====================================================== */
 const { generateQuestionPDF } = require("./utils/questionPdfGenerator");
 const reportGuard = require("./middleware/reportGuard");
-const { readData, writeData, updateData } = require("./utils/dataStore");
+const { readData, writeData, updateData, normalizeScoreCaps } = require("./utils/dataStore");
 const { uploadBuffer, uploadLocalFileAndCleanup, tempPdfPath, deleteFromStorage, storagePathFromUrl, resolveImageForGeneration, withResolvedImages, withResolvedImagesForMany, withResolvedFieldForMany } = require("./utils/storage");
 const { requireActiveSchool, startRegistryHeartbeat } = require("./utils/registryCheck");
 const { generateExamPDF, generateConsolidatedResultPDF } = require("./utils/pdfGenerator");
@@ -908,7 +913,18 @@ app.get('/manage-unlock', (req, res) => {
 app.get('/api/meta', (req, res) => {
   try {
     const data = ReadData();
-    res.json({ meta: data.meta });
+    const meta = { ...data.meta, scoreCaps: normalizeScoreCaps(data.meta?.scoreCaps) };
+    // This endpoint is public (the landing page and every portal read
+    // it), but meta also holds the portal passwords (stored in plain
+    // text) and the settings-unlock hash — they were being handed to
+    // anyone who simply requested this URL. Nothing in either frontend
+    // reads them from here, so they're now only included for a logged-in
+    // admin session.
+    if (!req.session?.admin) {
+      delete meta.portalPasswords;
+      delete meta.unlockPasswordHash;
+    }
+    res.json({ meta });
   } catch (err) {
     console.error('/api/meta error:', err);
     res.status(500).json({ error: 'Unable to read meta' });
@@ -1036,6 +1052,55 @@ app.post('/api/admin/testToggles', async (req, res) => {
   } catch (err) {
     console.error('POST testToggles error:', err);
     res.status(500).json({ error: 'Failed to update test toggles' });
+  }
+});
+
+// ---------------- SCORE CAPS (admin-configurable grading scale) ----------------
+app.get('/api/admin/scoreCaps', (req, res) => {
+  if (!req.session.admin) return res.status(401).json({ error: 'Unauthorized' });
+  res.json({ scoreCaps: getScoreCaps() });
+});
+
+// Sets the maximum mark for each assessment. Any non-negative number is
+// accepted for each (0 = "this assessment isn't used"), at least one
+// must be above 0. Scores that were already entered are NOT altered —
+// but if any now exceed a lowered maximum, the response says how many
+// so the admin knows to review them rather than finding out later on a
+// report sheet.
+app.post('/api/admin/scoreCaps', async (req, res) => {
+  if (!req.session.admin) return res.status(401).json({ error: 'Unauthorized' });
+
+  const fields = ['test1', 'test2', 'test3', 'exam'];
+  const caps = {};
+  for (const f of fields) {
+    const raw = req.body?.[f];
+    const n = Number(raw);
+    if (raw === undefined || raw === null || raw === '' || !Number.isFinite(n) || n < 0 || n > 1000) {
+      return res.status(400).json({ error: `${f} must be a number between 0 and 1000` });
+    }
+    caps[f] = Math.round(n * 100) / 100;
+  }
+  if (fields.every(f => caps[f] === 0)) {
+    return res.status(400).json({ error: 'At least one assessment must have a maximum above 0' });
+  }
+
+  try {
+    await updateData((data) => {
+      if (!data.meta) data.meta = {};
+      data.meta.scoreCaps = caps;
+    }, ['settings']);
+
+    const overCap = {};
+    (readData().results || []).forEach(r => {
+      fields.forEach(f => {
+        if (typeof r[f] === 'number' && r[f] > caps[f]) overCap[f] = (overCap[f] || 0) + 1;
+      });
+    });
+
+    res.json({ success: true, scoreCaps: caps, overCap });
+  } catch (err) {
+    console.error('POST scoreCaps error:', err);
+    res.status(500).json({ error: 'Failed to save score caps' });
   }
 });
 
@@ -3905,7 +3970,48 @@ app.get("/api/teacher/class/:classId/subject/:subjectId/scores", (req, res) => {
       };
     });
 
-  res.json({ students });
+  res.json({ students, scoreCaps: getScoreCaps() });
+});
+
+// Class-wide completion across EVERY subject — what the teacher portal
+// uses to decide when it's time to ask for the class signature. The
+// signature belongs to the whole class (it's printed on every subject's
+// report), so asking for it as soon as ONE subject is complete — which
+// is what used to happen — interrupted teachers who still had other
+// subjects left to enter. Only assessments with a maximum above 0
+// count (a school that doesn't use Test 3 isn't waiting on it).
+app.get("/api/teacher/class/:classId/completion", (req, res) => {
+  if (!req.session.portalTeacher)
+    return res.status(401).json({ error: "Teacher login required" });
+  if (req.session.teacherClass !== req.params.classId)
+    return res.status(403).json({ error: "You haven't unlocked this class" });
+
+  const { classId } = req.params;
+  const data = readData();
+  const caps = getScoreCaps();
+  const activeFields = ["test1", "test2", "test3", "exam"].filter(f => caps[f] > 0);
+  const students = (data.students || []).filter(s => s.classId === classId);
+
+  const subjects = getClassSubjectsResolved(data, classId).map(subj => {
+    let missing = 0;
+    students.forEach(st => {
+      const r = (data.results || []).find(x => x.studentId === st.id && x.subject === subj.id);
+      activeFields.forEach(f => {
+        if (!r || r[f] === undefined || r[f] === null) missing++;
+      });
+    });
+    return { id: subj.id, name: subj.name, missing, expected: students.length * activeFields.length };
+  });
+
+  const totalMissing = subjects.reduce((a, s) => a + s.missing, 0);
+  const cls = (data.classes || []).find(c => c.id === classId);
+
+  res.json({
+    subjects,
+    totalMissing,
+    allComplete: subjects.length > 0 && students.length > 0 && totalMissing === 0,
+    hasSignature: Boolean(cls?.teacherSignature),
+  });
 });
 
 // Saves exactly ONE cell — deliberately separate from the older
@@ -3930,7 +4036,7 @@ app.put(
 
     if (value !== null && value !== "" && value !== undefined) {
       const num = Number(value);
-      const cap = SCORE_CAPS[field];
+      const cap = getScoreCaps()[field];
       if (Number.isNaN(num) || num < 0 || num > cap) {
         return res.status(400).json({ error: `${field} must be between 0 and ${cap}` });
       }
@@ -4622,7 +4728,7 @@ async function regenerateConsolidatedPDF(studentId, category) {
       // entirely. Dividing by the fixed constant instead is correct
       // by construction and needs no clamp as a workaround — though
       // the clamp stays in as a harmless backstop regardless.
-      const examMaxMarks = SCORE_CAPS.exam;
+      const examMaxMarks = getScoreCaps().exam;
       const rawPercentage = examMaxMarks > 0 ? (r.exam / examMaxMarks) * 100 : null;
       const percentage = rawPercentage === null ? null : Number(Math.min(100, Math.max(0, rawPercentage)).toFixed(1));
       subjectRows.push({ subjectName, examScore: r.exam, percentage });
@@ -4786,7 +4892,7 @@ app.post('/api/exam/submit', preventMultipleSubmissions, async (req, res) => {
       // a separate variable) keeps everything downstream consistent —
       // the student's own confirmation screen, the saved result, and
       // the PDF all agree on the same number.
-      score = Math.min(score, SCORE_CAPS[type] ?? score);
+      score = Math.min(score, getScoreCaps()[type] ?? score);
 
       if (type === 'test1') existing.test1 = score;
       if (type === 'test2') existing.test2 = score;
@@ -4810,7 +4916,7 @@ app.post('/api/exam/submit', preventMultipleSubmissions, async (req, res) => {
     // submission. Falls back to the raw totalPossible only for a type
     // with no defined cap (shouldn't happen for test1/test2/test3/exam,
     // but keeps this safe if a new type is ever added without one).
-    const gradedTotal = SCORE_CAPS[type] ?? totalPossible;
+    const gradedTotal = getScoreCaps()[type] ?? totalPossible;
     const percentage = gradedTotal > 0 ? Number(((score / gradedTotal) * 100).toFixed(2)) : 0;
 
     // Regenerate this student's persistent, parent-facing summary PDF

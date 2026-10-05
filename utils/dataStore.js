@@ -41,6 +41,27 @@ async function query(sql, params) {
 }
 
 // --------------------------------------------------------------
+// SCORE CAPS: the maximum mark for each assessment (test1/test2/test3
+// and exam), configurable per school from the admin panel. The old
+// hardcoded scale (10/10/10/70) is the default for any school that
+// hasn't customised it, so nothing changes until an admin chooses to.
+// A cap of 0 means "this assessment isn't used by this school".
+// --------------------------------------------------------------
+const DEFAULT_SCORE_CAPS = { test1: 10, test2: 10, test3: 10, exam: 70 };
+function normalizeScoreCaps(raw) {
+  const out = {};
+  for (const key of Object.keys(DEFAULT_SCORE_CAPS)) {
+    const n = Number(raw && raw[key]);
+    out[key] = Number.isFinite(n) && n >= 0 && n <= 1000 ? n : DEFAULT_SCORE_CAPS[key];
+  }
+  return out;
+}
+
+// Set true once the score_caps column is confirmed to exist (see
+// init()). Until then, saves simply skip that column instead of failing.
+let hasScoreCapsColumn = false;
+
+// --------------------------------------------------------------
 // LOAD: pull everything from Postgres and rebuild the exact same
 // nested shape the old data.json had.
 // --------------------------------------------------------------
@@ -108,6 +129,7 @@ async function loadFromDatabase() {
     portalToggles: { ...DEFAULT_PORTAL_TOGGLES, ...(s.portal_toggles || {}) },
     portalPasswords: s.portal_passwords || {},
     testToggles: { ...DEFAULT_TEST_TOGGLES, ...(s.test_toggles || {}) },
+    scoreCaps: normalizeScoreCaps(s.score_caps),
     unlockPasswordHash: s.unlock_password_hash
   };
 
@@ -234,6 +256,12 @@ async function saveToDatabase(data, only = null) {
          meta.nextTermBegins, meta.logo, meta.signaturePrincipal, JSON.stringify(meta.portalToggles || {}),
          JSON.stringify(meta.portalPasswords || {}), JSON.stringify(meta.testToggles || {}), meta.unlockPasswordHash]
       );
+      if (hasScoreCapsColumn) {
+        await client.query(
+          `UPDATE settings SET score_caps=$1 WHERE id = 1`,
+          [JSON.stringify(normalizeScoreCaps(meta.scoreCaps))]
+        );
+      }
     }
 
     if (shouldSave('admins')) {
@@ -416,6 +444,18 @@ let ready = false;
 let saveQueue = Promise.resolve(); // serializes background saves, in order
 
 async function init() {
+  // Self-migrating: adds the score_caps column to this school's own
+  // settings table if it isn't there yet (idempotent — a no-op on every
+  // boot after the first), so no manual SQL is needed per school. If
+  // the database role isn't allowed to alter tables, this logs a clear
+  // warning and the app keeps running on the default scale instead of
+  // failing to start.
+  try {
+    await query('ALTER TABLE settings ADD COLUMN IF NOT EXISTS score_caps JSONB');
+    hasScoreCapsColumn = true;
+  } catch (err) {
+    console.warn('⚠ Could not add settings.score_caps column — custom score caps will not persist until it exists:', err.message);
+  }
   cache = await loadFromDatabase();
   ready = true;
   console.log('✔ dataStore loaded from Postgres schema:', SCHEMA);
@@ -480,4 +520,4 @@ function whenReady() {
   return initPromise;
 }
 
-module.exports = { readData, writeData, updateData, whenReady, supabase, SCHOOL_BUCKET: BUCKET };
+module.exports = { readData, writeData, updateData, whenReady, supabase, SCHOOL_BUCKET: BUCKET, normalizeScoreCaps, DEFAULT_SCORE_CAPS };

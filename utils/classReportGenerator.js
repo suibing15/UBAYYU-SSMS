@@ -14,6 +14,29 @@ function ensureDir(p) {
   if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true });
 }
 
+
+// The grading bands below (A = 70+, B = 60+, ...) are percentages. A
+// subject's total used to be assumed to be out of 100, which only holds
+// for the default 10/10/10/70 scale. Now that each school can set its own
+// maximum per assessment, a total is first converted to a percentage of
+// the school's real maximum (the sum of its configured assessment caps)
+// before grading — so 45/50 grades as 90%, not as 45%. With the default
+// scale the maximum is 100 and this changes nothing.
+function maxTotalOf(meta) {
+  const c = (meta && meta.scoreCaps) || { test1: 10, test2: 10, test3: 10, exam: 70 };
+  const sum = ["test1", "test2", "test3", "exam"].reduce((a, k) => a + (Number(c[k]) > 0 ? Number(c[k]) : 0), 0);
+  return sum > 0 ? sum : 100;
+}
+function asPercent(value, meta) {
+  return (Number(value) / maxTotalOf(meta)) * 100;
+}
+// "Average: 41.20" normally; "Average: 41.20 (68.7%)" when the school's
+// maximum isn't 100, so the raw average is never misread as a percentage.
+function averageLabel(avg, meta) {
+  const max = maxTotalOf(meta);
+  return max === 100 ? `Average: ${avg}` : `Average: ${avg} (${asPercent(avg, meta).toFixed(1)}%)`;
+}
+
 function getGradeAndRemark(score) {
   if (score >= 70) return { grade: "A", remark: "Excellent" };
   if (score >= 60) return { grade: "B", remark: "Very Good" };
@@ -142,7 +165,7 @@ function generateClassReportPDF(meta, students, results, subjects, outPath, call
   const ex = +r.exam  || 0;
 
   const sum = t1 + t2 + t3 + ex;
-  const { grade, remark } = getGradeAndRemark(sum);
+  const { grade, remark } = getGradeAndRemark(asPercent(sum, meta));
 
   total += sum;
   count++;
@@ -169,11 +192,11 @@ function generateClassReportPDF(meta, students, results, subjects, outPath, call
       doc.font("Helvetica-Bold").fontSize(10);
       doc.text(`Subjects: ${count}`, 60, rowY);
       doc.text(`Total: ${total}`, 220, rowY);
-      doc.text(`Average: ${avg}`, 380, rowY);
+      doc.text(averageLabel(avg, meta), 380, rowY);
 
       rowY += 28;
       doc.text("Teacher's Recommendation:", 60, rowY);
-      doc.font("Helvetica").text(getRecommendation(avg), 60, rowY + 14, { width: 380 });
+      doc.font("Helvetica").text(getRecommendation(asPercent(avg, meta)), 60, rowY + 14, { width: 380 });
     // Next Term
     doc.font("Helvetica-Bold").fontSize(10).text("Next Term Begins:",400,y);
     doc.font("Helvetica").fontSize(10).text(meta.nextTermBegins || "TBA",400,y+14);
